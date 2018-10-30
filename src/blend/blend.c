@@ -41,6 +41,7 @@ static m_ble_service_handle_t*  _blend_service_handles;
 
 #define _blend_reserved_idx (BLEND_MAX_Beacon_size - BLEND_Bi_Beacon_Reserved)
 #define _blend_payload_index (BLEND_IDENTIFIER_LENGTH + BLEND_STACK_RESERVED)
+bool _blend_adv_upload_flag = false;
 
 #if defined(BLEND_SDK_THINGY) || defined(BLEND_SDK_14)
 static ble_gap_scan_params_t const m_scan_params =
@@ -73,7 +74,6 @@ static ble_gap_scan_params_t const m_scan_params =
 static uint8_t              _blend_adv_handle = BLE_GAP_ADV_SET_HANDLE_NOT_SET; /**< Advertising handle used to identify an advertising set. */
 static uint8_t              _blend_enc_advdata[BLE_GAP_ADV_SET_DATA_SIZE_MAX];  /**< Buffer for storing an encoded advertising set. */
 static nrf_ble_scan_t _blend_scan_instance;
-
 /**@brief Struct that contains pointers to the encoded advertising data. */
 static ble_gap_adv_data_t _blend_adv_data =
 {
@@ -159,7 +159,7 @@ void advertising_set(void)
 	#else
 		err_code = sd_ble_gap_adv_data_set(_blend_beacon_info, BLEND_MAX_Beacon_size, _blend_beacon_info + 3, 28);
 	#endif
-	
+	_blend_adv_upload_flag = false;
     APP_ERROR_CHECK(err_code);
 }
 
@@ -241,6 +241,8 @@ void advertising_set(void)
 
     err_code = sd_ble_gap_adv_set_configure(&_blend_adv_handle, &_blend_adv_data, &_blend_adv_params);
     APP_ERROR_CHECK(err_code);
+	_blend_adv_upload_flag = false;
+
 }
 
 void advertising_init(void)
@@ -442,6 +444,10 @@ void advertising_stop(void)
 		_blend_beacon_sd_stop();
 		_blend_on_beacon_flag = 0;
 	}
+	if (_blend_adv_upload_flag){
+		advertising_set();
+	}
+
 }
 
 void beacon_count_set(int num)
@@ -620,7 +626,12 @@ blend_ret_t blend_advdata_set(blend_data_t *input)
 	{
 		_blend_beacon_info[_blend_payload_index + i] = payload[i];
 	}
-	advertising_set();
+	if (_blend_on_beacon_flag ==1){
+		_blend_adv_upload_flag = true;
+	} else {
+		advertising_set();
+	}
+	
 	return BLEND_NO_ERROR;
 }
 
