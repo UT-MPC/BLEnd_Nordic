@@ -25,6 +25,7 @@ SDK_DIR="${ROOT_DIR}/sdk"
 SDK_PATH="@SDK_PATH"
 SDK_VERSION="@SDK_VERSION@"
 THINGY_ARCHIVE_NAME="Nordic-Thingy52-FW-2.1.0"
+TOOLCHAIN_URL="http://infocenter.nordicsemi.com/topic/com.nordic.infocenter.tools/dita/tools/nrf5x_command_line_tools/nrf5x_installation.html"
 VERSION_LENGTH="${#SDK_ADDR[@]}"
 
 check_prerequisite(){
@@ -122,7 +123,8 @@ add_template_project()
     echo -e "\nCreating template project..."
     if [ "$SDK_VERSION" -le 1 ];then
 	proj_dir="${SDK_PATH}/examples/ble_central"
-    else	
+    else
+	thingy_sdk_change
 	proj_dir="${SDK_PATH}/project"
     fi
 
@@ -148,6 +150,14 @@ thingy_sdk_change()
     exit 1
 }
 
+finish()
+{
+    echo " All done. You're now ready to begin your BLEnd development (with the template project)."
+    if [ "$NRF_TOOL_INSTALLED" == true ]; then
+	echo -e "\n -[nRF5x Command Line Tools] is not installed. Follow ${TOOLCHAIN_URL} to install the nRF toolchain."
+    fi
+}
+
 show_welcome
 
 check_prerequisite
@@ -159,3 +169,5 @@ download_sdk
 add_blend_src
 
 add_template_project
+
+finish
