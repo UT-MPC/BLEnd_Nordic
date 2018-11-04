@@ -18,6 +18,8 @@ ARCHIVE_NAME="@ARCHIVE_NAME@"
 BLEND_SRC_DIR="src/blend"
 BLEND_TEMP_ORI_LOCATION="src/blend_project_templates"
 BLEND_TEMP_NAME="blend_app_template"
+COMPILE_THINGY_URL="https://nordicsemiconductor.github.io/Nordic-Thingy52-FW/documentation/firmware_compile.html"
+COMPLIE_NRF52_URL="https://devzone.nordicsemi.com/tutorials/b/getting-started/posts/development-with-gcc-and-eclipse"
 NRF_TOOL_INSTALLED=false
 NRF_TOOL_NAME="nrfjprog"
 ROOT_DIR=$(pwd)
@@ -60,10 +62,10 @@ version_select()
     echo -e "\n- Which SDK version do you need?"
     for (( i=0; i<${#SDK_ADDR[@]};i++ ));
     do
-	echo "[$i]:${SDK_NAMES[$i]}"
+	echo "  [$i]:${SDK_NAMES[$i]}"
     done
 
-    read -p "Enter the SDK# and press [ENTER]: " in_sdk_version
+    read -p " Enter the SDK# and press [ENTER]: " in_sdk_version
 
     if [ "$in_sdk_version" -ge 0 -a "$in_sdk_version" -le 2 ];
     then SDK_VERSION=$in_sdk_version;
@@ -77,7 +79,7 @@ download_sdk()
     URL="${SDK_ADDR[$SDK_VERSION]}"
     mkdir -p "${SDK_DIR}"
     ARCHIVE_NAME="${URL##*/}"
-    echo " Downloading SDK [${SDK_NAMES[$SDK_VERSION]}]..."
+    echo "Downloading SDK [${SDK_NAMES[$SDK_VERSION]}]..."
     if [ -f "${SDK_DIR}/${ARCHIVE_NAME}" ]; then
     	echo " ${ARCHIVE_NAME} exists, skip downloading."
     else
@@ -139,7 +141,7 @@ add_template_project()
     cp -r "${temp_dir}" "${proj_dir}"
 
     if [ -d "${proj_dir}/${BLEND_TEMP_NAME}" ]; then
-	echo -e " Done. \n Template project location: ${proj_dir}/${BLEND_TEMP_NAME}"
+	echo -e " Done. \n Template project location: \033[1m${proj_dir}/${BLEND_TEMP_NAME}\033[0m"
     fi
 }
 
@@ -156,10 +158,20 @@ thingy_sdk_change()
 
 finish()
 {
-    echo " All done. You're now ready to begin your BLEnd development (with the template project)."
+    echo -e "\n \033[1mAll done. You're now ready to compile the SDK and begin your" \
+	 "BLEnd development (with the template project).\033[0m"
+
     if [ ! "$NRF_TOOL_INSTALLED" == true ]; then
-	echo -e "\n -[nRF5x Command Line Tools] is not installed. Follow ${TOOLCHAIN_URL} to install the nRF toolchain."
+	echo -e "\n -[nRF5x Command Line Tools] is not installed. Follow ${TOOLCHAIN_URL}" \
+	     " to install the nRF toolchain."
     fi
+
+    if [ "${SDK_VERSION}" -eq 2 ]; then
+	echo -e "\n (Guide for compiling Thingy firmware: ${COMPILE_THINGY_URL})"
+    else
+	echo -e "\n (Guide for compiling nRF5x SDK: ${COMPLIE_NRF52_URL})"
+    fi
+
 }
 
 show_welcome
