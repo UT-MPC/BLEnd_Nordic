@@ -39,7 +39,7 @@ static m_ble_service_handle_t*  _blend_service_handles;
 #define epoch_timer_mode APP_TIMER_MODE_REPEATED  					/*repeat*/
 
 
-#define _blend_reserved_idx (BLEND_MAX_Beacon_size - BLEND_Bi_Beacon_Reserved)
+#define _blend_reserved_idx (BEACON_SIZE_B - BLEND_BIDIR_RESERVED_LENGTH)
 #define _blend_payload_index (BLEND_IDENTIFIER_LENGTH + BLEND_STACK_RESERVED)
 bool _blend_adv_upload_flag = false;
 
@@ -93,12 +93,12 @@ static ble_gap_adv_data_t _blend_adv_data =
 #endif
 // Blend schedule values
 // Variables that needs to change in initialization
-static uint16_t _epoch_during_in_ms = 2000;
+static uint16_t _epoch_length_ms = 2000;
 static uint16_t _beacon_interval_ms	= 100;
 static uint16_t _scan_during_in_ms = 120;
 static int _mid_beacon = 0 ;
 uint8_t * _special_beacons;
-static uint8_t _blend_mode = BLEND_TYPE_FULL;
+static uint8_t _blend_mode = BLEND_MODE_FULL;
 static blend_evt_handler_t _blend_evt_handler;
 // Variables that does NOT need to change in initialization
 static uint32_t _blend_epoch_start = 0;
@@ -151,13 +151,13 @@ void advertising_set(void)
 	_blend_beacon_info[2] = 0x04;
 	
 	/* set the blend length */
-	_blend_beacon_info[3] = BLEND_MAX_Beacon_size - 4;
+	_blend_beacon_info[3] = BEACON_SIZE_B - 4;
 	/* set the identifier for blend */
 	_blend_beacon_info[4] = BLEND_IDENTIFIER;
 	#if _BLEND_SCAN_RSP == 0
-		err_code = sd_ble_gap_adv_data_set(_blend_beacon_info, BLEND_MAX_Beacon_size, NULL, 0);
+		err_code = sd_ble_gap_adv_data_set(_blend_beacon_info, BEACON_SIZE_B, NULL, 0);
 	#else
-		err_code = sd_ble_gap_adv_data_set(_blend_beacon_info, BLEND_MAX_Beacon_size, _blend_beacon_info + 3, 28);
+		err_code = sd_ble_gap_adv_data_set(_blend_beacon_info, BEACON_SIZE_B, _blend_beacon_info + 3, 28);
 	#endif
 	_blend_adv_upload_flag = false;
     APP_ERROR_CHECK(err_code);
@@ -196,7 +196,7 @@ void advertising_init(void)
 //			NRF_LOG_HEXDUMP_DEBUG(p_adv_report->peer_addr.addr, 6);
 //			NRF_LOG_DEBUG("get message from addr type: %d", p_adv_report->peer_addr.addr_type);
 			uint32_t now_time = app_timer_cnt_get();
-			if (_blend_mode == BLEND_TYPE_Bi){
+			if (_blend_mode == BLEND_MODE_BI){
 				countdown = (p_data[_blend_reserved_idx] << 8) + p_data[_blend_reserved_idx+1];
 				if (countdown == 0xffff) countdown =0;
 				countdown = countdown - _scan_during_in_ms + APP_TIMER_MS(app_timer_cnt_diff_compute(now_time, _blend_epoch_start));
@@ -227,7 +227,7 @@ void advertising_set(void)
     manuf_specific_data.company_identifier = BLEND_IDENTIFIER;
 
     manuf_specific_data.data.p_data = (uint8_t *) _blend_beacon_info;
-    manuf_specific_data.data.size   = BLEND_MAX_Beacon_size;
+    manuf_specific_data.data.size   = BEACON_SIZE_B;
 
     // Build and set advertising data.
     memset(&advdata, 0, sizeof(advdata));
@@ -453,11 +453,11 @@ void advertising_stop(void)
 void beacon_count_set(int num)
 {
 	uint16_t now_countdown;
-	now_countdown = _epoch_during_in_ms - APP_TIMER_MS(app_timer_cnt_diff_compute(app_timer_cnt_get(),_blend_epoch_start));
+	now_countdown = _epoch_length_ms - APP_TIMER_MS(app_timer_cnt_diff_compute(app_timer_cnt_get(),_blend_epoch_start));
 	if (num == -1){
 		now_countdown = ONE_BEACON_MS;
 	}
-	if (_blend_mode == BLEND_TYPE_Bi){
+	if (_blend_mode == BLEND_MODE_BI){
 		_blend_beacon_info[_blend_reserved_idx] = (now_countdown & 0xff00) >> 8;
 		_blend_beacon_info[_blend_reserved_idx+1] = now_countdown & 0xff;
 	}
@@ -531,7 +531,7 @@ void half_epoch_timer_handler (void * p_context)
 	{
 		_epoch_flag = 1;
 		advertising_stop();
-		memset(_special_beacons, 0, (ROUNDED_DIV(_epoch_during_in_ms , _beacon_interval_ms) + 2) * sizeof(_special_beacons[0]));
+		memset(_special_beacons, 0, (ROUNDED_DIV(_epoch_length_ms , _beacon_interval_ms) + 2) * sizeof(_special_beacons[0]));
 		//Call blend handler
 		blend_evt_t new_blend_evt;
 		new_blend_evt.evt_id = BLEND_EVT_EPOCH_START;
@@ -568,7 +568,7 @@ void blend_sched_start()
 {
 	ret_code_t err_code;
 	_epoch_flag = 1;
-	err_code=app_timer_start(half_epoch_timer,APP_TIMER_TICKS(_epoch_during_in_ms /2),NULL);
+	err_code=app_timer_start(half_epoch_timer,APP_TIMER_TICKS(_epoch_length_ms /2),NULL);
 	APP_ERROR_CHECK(err_code);
 	scan_prepare();
 }
@@ -600,11 +600,11 @@ void blend_timer_set(void)
 
 void blend_param_set(blend_param_t input)
 {
-	_epoch_during_in_ms = input.epoch_during_in_ms;
-	_beacon_interval_ms = input.beacon_interval_in_ms;
+	_epoch_length_ms = input.epoch_length_ms;
+	_beacon_interval_ms = input.adv_interval_ms;
     _scan_during_in_ms = (_beacon_interval_ms + 5 + 10);
-	_special_beacons = (uint8_t *) malloc( (ROUNDED_DIV(_epoch_during_in_ms , _beacon_interval_ms) + 2) * sizeof(uint8_t)) ;
-	_mid_beacon = ((_epoch_during_in_ms / 2) - _scan_during_in_ms + _beacon_interval_ms / 2 ) / _beacon_interval_ms ;
+	_special_beacons = (uint8_t *) malloc( (ROUNDED_DIV(_epoch_length_ms , _beacon_interval_ms) + 2) * sizeof(uint8_t)) ;
+	_mid_beacon = ((_epoch_length_ms / 2) - _scan_during_in_ms + _beacon_interval_ms / 2 ) / _beacon_interval_ms ;
 	_blend_mode = input.blend_mode;
 }
 
@@ -613,13 +613,13 @@ blend_ret_t blend_advdata_set(blend_data_t *input)
 	uint8_t dlen = input->data_length;
 	uint8_t * payload = input->data;
 	
-	if (dlen > BLEND_MAX_PAYLOAD_SIZE){
+	if (dlen > BLEND_USER_PAYLOAD_SIZE){
 		return BLEND_DATA_OVERFLOW;
 	}
 	
-	if (_blend_mode == BLEND_TYPE_Bi) {
-		if (dlen > BLEND_MAX_PAYLOAD_SIZE - BLEND_Bi_Beacon_Reserved){
-			return BLEND_Bi_MODE_OVERFLOW;
+	if (_blend_mode == BLEND_MODE_BI) {
+		if (dlen > BLEND_USER_PAYLOAD_SIZE - BLEND_BIDIR_RESERVED_LENGTH){
+			return BLEND_BI_DIR_OVERFLOW;
 		}
 	}
 	for (int i = 0; i < dlen; i++)
