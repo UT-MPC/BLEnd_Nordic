@@ -35,16 +35,17 @@
   LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
   OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "m_environment.h"
 #include "m_motion.h"
-#include "m_motion_flash.h"
+
+#define  NRF_LOG_MODULE_NAME "m_motion      "
 #include "ble_tms.h"
 #include "drv_motion.h"
-#include "sdk_errors.h"
-#include "pca20020.h"
-#define  NRF_LOG_MODULE_NAME "m_motion      "
-#include "nrf_log.h"
+#include "m_environment.h"
+#include "m_motion_flash.h"
 #include "macros_common.h"
+#include "nrf_log.h"
+#include "pca20020.h"
+#include "sdk_errors.h"
 
 #define RAW_PARAM_NUM                 9     // Number of raw parameters (3 * acc + 3 * gyro + 3 * compass).
 #define RAW_Q_FORMAT_ACC_INTEGER_BITS 6     // Number of bits used for integer part of raw data.

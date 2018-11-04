@@ -37,21 +37,23 @@
  */
 
 #include "m_environment.h"
+
 #include <string.h>
+
+#define  NRF_LOG_MODULE_NAME "m_env         "
+#include "app_timer.h"
 #include "app_util_platform.h"
-#include "m_environment_flash.h"
+#include "drv_color.h"
+#include "drv_gas_sensor.h"
 #include "drv_humidity.h"
 #include "drv_pressure.h"
-#include "drv_gas_sensor.h"
-#include "drv_color.h"
-#include "app_timer.h"
-#include "pca20020.h"
-#include "nrf_delay.h"
 #include "fstorage.h"
+#include "m_environment_flash.h"
 #include "m_ui.h"
-#define  NRF_LOG_MODULE_NAME "m_env         "
-#include "nrf_log.h"
 #include "macros_common.h"
+#include "nrf_delay.h"
+#include "nrf_log.h"
+#include "pca20020.h"
 
 /**@brief Different GAS sensor states.
  */
@@ -64,8 +66,6 @@ typedef enum
 
 #define M_GAS_CALIB_INTERVAL_MS (1000 * 60 * 60) ///< Humidity and temperature calibration interval for the gas sensor [ms].
 #define M_GAS_BASELINE_WRITE_MS (1000 * 60 * 30) ///< Stored baseline calibration delay for the gas sensor [ms].
-
-
 
 uint32_t _env_app_start, _env_temp_start, _env_gas_start, _env_pressure_start, _env_motion_start,_env_color_start;
 
@@ -105,7 +105,7 @@ static void temperature_conv_data(float in_temp, ble_tes_temperature_t * p_out_t
     f_decimal = in_temp - p_out_temp->integer;
     p_out_temp->decimal = (uint8_t)(f_decimal * 100.0f);
     NRF_LOG_INFO("temperature_conv_data: Temperature: ,%d.%d,C\r\n", p_out_temp->integer, p_out_temp->decimal);
-	NRF_LOG_INFO("temperature delay: %d\r\n", APP_TIMER_MS(app_timer_cnt_diff_compute(app_timer_cnt_get(),_env_temp_start)));
+    NRF_LOG_INFO("temperature delay: %d\r\n", APP_TIMER_MS(app_timer_cnt_diff_compute(app_timer_cnt_get(),_env_temp_start)));
 }
 
 
@@ -115,7 +115,7 @@ static void humidity_conv_data(uint8_t humid, ble_tes_humidity_t * p_out_humid)
 {
    *p_out_humid = (uint8_t)humid;
    NRF_LOG_INFO("humidity_conv_data: Relative Humidty: ,%d,%%\r\n", humid);
-	NRF_LOG_INFO("temperature delay: %d\r\n", APP_TIMER_MS(app_timer_cnt_diff_compute(app_timer_cnt_get(),_env_temp_start)));
+   NRF_LOG_INFO("temperature delay: %d\r\n", APP_TIMER_MS(app_timer_cnt_diff_compute(app_timer_cnt_get(),_env_temp_start)));
 }
 
 
@@ -129,7 +129,7 @@ static void pressure_conv_data(float in_press, ble_tes_pressure_t * p_out_press)
     f_decimal = in_press - p_out_press->integer;
     p_out_press->decimal = (uint8_t)(f_decimal * 100.0f);
     NRF_LOG_INFO("pressure_conv_data: Pressure/Altitude: %d.%d Pa/m\r\n", p_out_press->integer, p_out_press->decimal);
-	NRF_LOG_INFO("pressure delay: %d\r\n", APP_TIMER_MS(app_timer_cnt_diff_compute(app_timer_cnt_get(),_env_pressure_start)));
+    NRF_LOG_INFO("pressure delay: %d\r\n", APP_TIMER_MS(app_timer_cnt_diff_compute(app_timer_cnt_get(),_env_pressure_start)));
 }
 
 
@@ -219,7 +219,7 @@ static void drv_gas_data_handler(drv_gas_sensor_data_t const * p_data)
         NRF_LOG_INFO("gas_data_handler eCO2:, %d, - TVOC:, %d,\r\n", p_data->ec02_ppm,
                                                                       p_data->tvoc_ppb);
 		
-		NRF_LOG_INFO("gas delay: %d\r\n", APP_TIMER_MS(app_timer_cnt_diff_compute(app_timer_cnt_get(),_env_gas_start)));
+	NRF_LOG_INFO("gas delay: %d\r\n", APP_TIMER_MS(app_timer_cnt_diff_compute(app_timer_cnt_get(),_env_gas_start)));
         (void)ble_tes_gas_set(&m_tes, &data);
 
         #if defined (ENV_DEBUG)
@@ -245,7 +245,7 @@ static void drv_color_data_handler(drv_color_data_t const * p_data)
     if (p_data != NULL)
     {
         ble_tes_color_t data;
-		NRF_LOG_INFO("color delay: %d\r\n", APP_TIMER_MS(app_timer_cnt_diff_compute(app_timer_cnt_get(),_env_color_start)));
+        NRF_LOG_INFO("color delay: %d\r\n", APP_TIMER_MS(app_timer_cnt_diff_compute(app_timer_cnt_get(),_env_color_start)));
         NRF_LOG_INFO("color_data_handler r: %d - g: %d - b: %d - c: %d\r\n", p_data->red,
                                                                               p_data->green,
                                                                               p_data->blue,

@@ -49,10 +49,11 @@
 #define __M_UI_H__
 
 #include "app_error.h"
-#include "m_ble.h"
-#include "nrf_drv_twi.h"
 #include "ble_uis.h"
 #include "drv_ext_light.h"
+#include "m_ble.h"
+#include "nrf_drv_twi.h"
+
 #define DEFAULT_LED_INTENSITY_PERCENT     20    ///< Default LED intensity [percent].
 #define DEFAULT_LED_ON_TIME_MS            35    ///< LED on duration [ms].
 #define DEFAULT_LED_OFF_TIME_MS         3500    ///< Time LED is off between cycles [ms].

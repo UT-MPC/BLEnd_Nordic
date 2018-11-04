@@ -37,21 +37,23 @@
  */
 
 #include "m_ui.h"
-#include "ble_uis.h"
-#include "m_ui_flash.h"
-#include "drv_ext_light.h"
-#include "app_error.h"
-#include "app_button.h"
+
 #include <stdlib.h>
 #include <string.h>
-#include "pca20020.h"
-#include "nrf_drv_gpiote.h"
+
+#include "app_button.h"
+#include "app_error.h"
 #include "app_scheduler.h"
 #include "app_timer.h"
+#include "ble_uis.h"
+#include "drv_ext_light.h"
+#include "m_ui_flash.h"
+#include "macros_common.h"
+#include "nrf_drv_gpiote.h"
+#include "nrf_log.h"
+#include "pca20020.h"
 
 #define  NRF_LOG_MODULE_NAME "m_ui          "
-#include "nrf_log.h"
-#include "macros_common.h"
 
 static ble_uis_led_t     * mp_config_ui;
 static ble_uis_t           m_uis;
@@ -367,7 +369,7 @@ static void button_evt_handler(uint8_t pin_no, uint8_t button_action)
                 APP_ERROR_CHECK(err_code);
             }
         }
-				NRF_LOG_INFO("In m_ui.c Key pressed \r\n");
+	NRF_LOG_INFO("Button pressed \r\n");
     }
 }
 

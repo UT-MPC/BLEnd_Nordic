@@ -36,31 +36,34 @@
   OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "ble.h"
+
 #include <stdint.h>
 #include <string.h>
-#include "nordic_common.h"
-#include "nrf.h"
-#include "ble_hci.h"
+
+#include "advertiser_beacon.h"
+#include "app_timer.h"
 #include "ble_advdata.h"
 #include "ble_advertising.h"
 #include "ble_conn_params.h"
 #include "ble_conn_state.h"
-#include "softdevice_handler_appsh.h"
-#include "app_timer.h"
+#include "ble_hci.h"
+#include "drv_nfc.h"
 #include "fstorage.h"
 #include "m_ble.h"
 #include "m_ble_flash.h"
-#include "drv_nfc.h"
-#include "thingy_config.h"
-#include "advertiser_beacon.h"
-#include "pca20020.h"
+#include "macros_common.h"
+#include "nordic_common.h"
+#include "nrf.h"
 #include "nrf_delay.h"
 #include "nrf_drv_rng.h"
-#include "support_func.h"
-#include "ble.h"
-#define  NRF_LOG_MODULE_NAME "m_ble         "
 #include "nrf_log.h"
-#include "macros_common.h"
+#include "pca20020.h"
+#include "softdevice_handler_appsh.h"
+#include "support_func.h"
+#include "thingy_config.h"
+
+#define  NRF_LOG_MODULE_NAME "m_ble         "
 
 #ifdef BLE_DFU_APP_SUPPORT
     #include "ble_dfu.h"
@@ -333,9 +336,6 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt)
         case BLE_ADV_EVT_IDLE:
             NRF_LOG_INFO("on_adv_evt: BLE_ADV_EVT_IDLE\r\n");
             evt.evt_type = thingy_ble_evt_timeout;
-           // err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
-            //APP_ERROR_CHECK(err_code);
-
             break;
         default:
             break;
@@ -353,22 +353,17 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
     m_ble_evt_t                    evt;
     switch (p_ble_evt->header.evt_id)
     {
-				case BLE_GAP_EVT_ADV_REPORT:
-						//NRF_LOG_INFO("on_ble_evt: BLE_GAP_EVT_ADV_REPORT\r\n");
-						m_evt_handler(p_ble_evt);
-						break;
+	case BLE_GAP_EVT_ADV_REPORT:
+	    m_evt_handler(p_ble_evt);
+	    break;
         case BLE_GAP_EVT_CONNECTED:
             NRF_LOG_INFO("on_ble_evt: BLE_GAP_EVT_CONNECTED\r\n");
             m_conn_handle = p_ble_evt->evt.gap_evt.conn_handle;
-
-            //evt.evt_type = thingy_ble_evt_connected;
-            //m_evt_handler(&evt);
             break;
 
         case BLE_GAP_EVT_DISCONNECTED:
             NRF_LOG_INFO("on_ble_evt: BLE_GAP_EVT_DISCONNECTED. Reason: 0x%x \r\n", p_ble_evt->evt.gap_evt.params.disconnected.reason);
             m_conn_handle = BLE_CONN_HANDLE_INVALID;
-						
             if (flash_access_ongoing())
             {
                 m_flash_disconnect = true;
@@ -376,10 +371,7 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
             else
             {
                 m_flash_disconnect = false;
-                //evt.evt_type = thingy_ble_evt_disconnected;
-                //m_evt_handler(&evt);
-            }
-						
+            }	
             break;
 
         case BLE_GAP_EVT_SEC_PARAMS_REQUEST:
@@ -482,15 +474,7 @@ static void sys_evt_dispatch(uint32_t evt_id)
          (evt_id == NRF_EVT_FLASH_OPERATION_ERROR) )
     {
         if (!flash_access_ongoing())
-        {
-            if (m_flash_disconnect)
-            {/*
-                m_ble_evt_t  evt;
-                evt.evt_type = thingy_ble_evt_disconnected;
-
-                m_evt_handler(&evt);*/
-            }
-        }
+        {}
     }
 }
 
