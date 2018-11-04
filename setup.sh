@@ -7,12 +7,12 @@
 # Template projects will be created in the SDK's project folder.
 
 declare -a PREREQUISITES=("pv" "wget")
-
 declare -a SDK_ADDR=("https://developer.nordicsemi.com/nRF5_SDK/nRF5_SDK_v15.x.x/nRF5_SDK_15.2.0_9412b96.zip" \
 		     "https://developer.nordicsemi.com/nRF5_SDK/nRF5_SDK_v14.x.x/nRF5_SDK_14.2.0_17b948a.zip" \
 		     "https://github.com/NordicSemiconductor/Nordic-Thingy52-FW/archive/v2.1.0.zip"
 		    )
 declare -a SDK_NAMES=("nRF5_SDK_v15" "nRF5_SDK_v14" "Thingy_IoT_SensorKit_v2.1.0")
+declare -a THINGY_SDK_CHANGES=("include" "source")
 
 ARCHIVE_NAME="@ARCHIVE_NAME@"
 BLEND_SRC_DIR="src/blend"
@@ -25,16 +25,17 @@ SDK_DIR="${ROOT_DIR}/sdk"
 SDK_PATH="@SDK_PATH"
 SDK_VERSION="@SDK_VERSION@"
 THINGY_ARCHIVE_NAME="Nordic-Thingy52-FW-2.1.0"
+THINGY_SDK_MOD_DIR="src/thingy_sdk_mod"
 TOOLCHAIN_URL="http://infocenter.nordicsemi.com/topic/com.nordic.infocenter.tools/dita/tools/nrf5x_command_line_tools/nrf5x_installation.html"
 VERSION_LENGTH="${#SDK_ADDR[@]}"
 
 check_prerequisite(){
     echo -e "Checking prerequisites."
-    for (( i=0; i<${PREREQUISITES};i++));
+    for (( i=0; i<${#PREREQUISITES[@]};i++));
     do
-	if ! [ -x "$(command -v ${PREREQUISITES{$i}})" ]; then
-	    echo " Error: ${PREREQUISITES{$i}} is not installed." >&2
-	    echo " Please run \'sudo apt-get install ${PREREQUISITES{$i}}\' first."
+	if ! [ -x "$(command -v ${PREREQUISITES[$i]})" ]; then
+	    echo " Error: ${PREREQUISITES[$i]} is not installed." >&2
+	    echo " Please run \'sudo apt-get install ${PREREQUISITES[$i]}\' first."
 	    exit 1
 	fi
     done
@@ -57,7 +58,7 @@ show_welcome()
 version_select()
 {
     echo -e "\n- Which SDK version do you need?"
-    for (( i=0; i<${VERSION_LENGTH};i++ ));
+    for (( i=0; i<${#SDK_ADDR[@]};i++ ));
     do
 	echo "[$i]:${SDK_NAMES[$i]}"
     done
@@ -135,7 +136,6 @@ add_template_project()
 
     temp_dir="${BLEND_TEMP_ORI_LOCATION}/${SDK_NAMES[$SDK_VERSION]}/${BLEND_TEMP_NAME}"
 
-    #echo " Copying [${temp_dir}] to ${proj_dir}"
     cp -r "${temp_dir}" "${proj_dir}"
 
     if [ -d "${proj_dir}/${BLEND_TEMP_NAME}" ]; then
@@ -145,15 +145,19 @@ add_template_project()
 
 thingy_sdk_change()
 {
-    # TODO(): Support Thingy SDK
-    echo "Thingy is not supported yet."
-    exit 1
+    echo " Installing minor modifications in Thingy SDK..."
+    for (( i=0; i<${#THINGY_SDK_CHANGES[@]};i++));
+    do
+	src_dir="${THINGY_SDK_MOD_DIR}/${THINGY_SDK_CHANGES[$i]}"
+	cp -r "${src_dir}" "${SDK_PATH}"
+    done
+    echo "  Done."
 }
 
 finish()
 {
     echo " All done. You're now ready to begin your BLEnd development (with the template project)."
-    if [ "$NRF_TOOL_INSTALLED" == true ]; then
+    if [ ! "$NRF_TOOL_INSTALLED" == true ]; then
 	echo -e "\n -[nRF5x Command Line Tools] is not installed. Follow ${TOOLCHAIN_URL} to install the nRF toolchain."
     fi
 }
