@@ -37,7 +37,7 @@ check_prerequisite(){
     do
 	if ! [ -x "$(command -v ${PREREQUISITES[$i]})" ]; then
 	    echo " Error: ${PREREQUISITES[$i]} is not installed." >&2
-	    echo " Please run \'sudo apt-get install ${PREREQUISITES[$i]}\' first."
+	    echo " Please run 'sudo apt-get install ${PREREQUISITES[$i]}' first."
 	    exit 1
 	fi
     done
