@@ -49,7 +49,7 @@ NRF_BLE_GATT_DEF(m_gatt);                                               /**< GAT
 BLE_DB_DISCOVERY_DEF(m_db_disc);                                        /**< DB discovery module instance. */
 //#define m_epoch_during 2000
 //#define m_beacon_interval 77
-blend_param_t m_blend_param = { 2000, 77, BLEND_TYPE_FULL};
+blend_param_t m_blend_param = { 2000, 77, BLEND_MODE_FULL};
 
 static uint16_t m_ble_nus_max_data_len = BLE_GATT_ATT_MTU_DEFAULT - OPCODE_LENGTH - HANDLE_LENGTH; /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Nordic UART service module. */
 #define APP_DEVICE_NUM                  0x07                              

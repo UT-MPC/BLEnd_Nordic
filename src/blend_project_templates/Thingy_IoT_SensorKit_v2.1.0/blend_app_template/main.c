@@ -91,7 +91,7 @@
 
 //#define m_epoch_during 2000
 //#define m_beacon_interval 77
-blend_param_t m_blend_param = { 2000, 77, BLEND_TYPE_FULL};
+blend_param_t m_blend_param = { 2000, 77, BLEND_MODE_FULL};
 #define APP_DEVICE_NUM                  0x02                              
 #define MAX_DEVICE						10
 #define m_data_len 						7 
