@@ -18,6 +18,7 @@ ARCHIVE_NAME="@ARCHIVE_NAME@"
 BLEND_SRC_DIR="src/blend"
 BLEND_TEMP_ORI_LOCATION="src/blend_project_templates"
 BLEND_TEMP_NAME="blend_app_template"
+COMPILE_THINGY_SDK_URL="https://github.com/NordicSemiconductor/Nordic-Thingy52-FW/blob/master/README.md"
 COMPILE_THINGY_URL="https://nordicsemiconductor.github.io/Nordic-Thingy52-FW/documentation/firmware_compile.html"
 COMPLIE_NRF52_URL="https://devzone.nordicsemi.com/tutorials/b/getting-started/posts/development-with-gcc-and-eclipse"
 NRF_TOOL_INSTALLED=false
@@ -167,6 +168,7 @@ finish()
     fi
 
     if [ "${SDK_VERSION}" -eq 2 ]; then
+	echo -e "\n (Guide for setting up Thingy SDK: ${COMPILE_THINGY_SDK_URL})"
 	echo -e "\n (Guide for compiling Thingy firmware: ${COMPILE_THINGY_URL})"
     else
 	echo -e "\n (Guide for compiling nRF5x SDK: ${COMPLIE_NRF52_URL})"
