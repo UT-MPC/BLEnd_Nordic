@@ -43,6 +43,7 @@ $(abspath ../../../sdk_components/nfc/t2t_lib/nfc_t2t_lib_gcc.a) \
 #source common to all targets
 C_SOURCE_FILES += \
 $(abspath ../main.c) \
+$(abspath ../../../blend/blend.c) \
 $(abspath ../../../source/modules/m_ble.c) \
 $(abspath ../../../source/modules/m_ble_flash.c) \
 $(abspath ../../../source/util/advertiser_beacon_timeslot.c) \
@@ -151,6 +152,7 @@ ASM_SOURCE_FILES  = $(abspath ../../../sdk_components/toolchain/gcc/gcc_startup_
 
 #includes common to all targets
 INC_PATHS += -I$(abspath ../config)
+INC_PATHS += -I$(abspath ../../../blend)
 INC_PATHS += -I$(abspath ../../../external/segger_rtt)
 INC_PATHS += -I$(abspath ../../../include/ble_services)
 INC_PATHS += -I$(abspath ../../../include/board)
@@ -265,7 +267,8 @@ CFLAGS += -DHAL_NFC_ENGINEERING_BC_FTPAN_WORKAROUND
 #
 CFLAGS += -mcpu=cortex-m4
 CFLAGS += -mthumb -mabi=aapcs --std=gnu99
-CFLAGS += -Wall -Werror -O3 -g3
+#CFLAGS += -Wall -Werror -O3 -g3
+CFLAGS += -Wall -O3 -g3
 CFLAGS += -mfloat-abi=hard -mfpu=fpv4-sp-d16
 # keep every function in separate section. This will allow linker to dump unused functions
 CFLAGS += -ffunction-sections -fdata-sections -fno-strict-aliasing
