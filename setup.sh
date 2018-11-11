@@ -33,7 +33,7 @@ THINGY_SDK_MOD_DIR="src/thingy_sdk_mod"
 TOOLCHAIN_URL="http://infocenter.nordicsemi.com/topic/com.nordic.infocenter.tools/dita/tools/nrf5x_command_line_tools/nrf5x_installation.html"
 VERSION_LENGTH="${#SDK_ADDR[@]}"
 
-check_prerequisite(){    
+check_prerequisite(){
     echo -e "Checking prerequisites."
     all_met="true"
     for (( i=0; i<${#PREREQUISITES[@]};i++));
@@ -42,7 +42,7 @@ check_prerequisite(){
 	    echo " -Error: ${PREREQUISITES[$i]} is not installed." >&2
 	    echo "  Please install '${PREREQUISITES[$i]}' first."
 	    all_met=false
-	    case "$(uname -s)" in		
+	    case "$(uname -s)" in
 		Darwin)
 		    KERNEL_NAME="Darwin"
 		    echo -e "  (Darwin detected. Try \033[1mbrew install" \
@@ -60,7 +60,7 @@ check_prerequisite(){
 		*)
 		    echo "  (Not able to decide which system are you using)"
 		    ;;
-	    esac   
+	    esac
 	fi
     done
 
