@@ -21,6 +21,7 @@ BLEND_TEMP_NAME="blend_app_template"
 COMPILE_THINGY_SDK_URL="https://github.com/NordicSemiconductor/Nordic-Thingy52-FW/blob/master/README.md"
 COMPILE_THINGY_URL="https://nordicsemiconductor.github.io/Nordic-Thingy52-FW/documentation/firmware_compile.html"
 COMPLIE_NRF52_URL="https://devzone.nordicsemi.com/tutorials/b/getting-started/posts/development-with-gcc-and-eclipse"
+KERNEL_NAME="@KERNEL_NAME"
 NRF_TOOL_INSTALLED=false
 NRF_TOOL_NAME="nrfjprog"
 ROOT_DIR=$(pwd)
@@ -32,16 +33,40 @@ THINGY_SDK_MOD_DIR="src/thingy_sdk_mod"
 TOOLCHAIN_URL="http://infocenter.nordicsemi.com/topic/com.nordic.infocenter.tools/dita/tools/nrf5x_command_line_tools/nrf5x_installation.html"
 VERSION_LENGTH="${#SDK_ADDR[@]}"
 
-check_prerequisite(){
+check_prerequisite(){    
     echo -e "Checking prerequisites."
+    all_met="true"
     for (( i=0; i<${#PREREQUISITES[@]};i++));
     do
 	if ! [ -x "$(command -v ${PREREQUISITES[$i]})" ]; then
-	    echo " Error: ${PREREQUISITES[$i]} is not installed." >&2
-	    echo " Please run 'sudo apt-get install ${PREREQUISITES[$i]}' first."
-	    exit 1
+	    echo " -Error: ${PREREQUISITES[$i]} is not installed." >&2
+	    echo "  Please install '${PREREQUISITES[$i]}' first."
+	    all_met=false
+	    case "$(uname -s)" in		
+		Darwin)
+		    KERNEL_NAME="Darwin"
+		    echo -e "  (Darwin detected. Try \033[1mbrew install" \
+			 "${PREREQUISITES[$i]}\033[0m)"
+		    ;;
+		Linux)
+		    KERNEL_NAME="Linux"
+		    echo -e "  (Linux detected. Try \033[1msudo apt-get install" \
+			 "${PREREQUISITES[$i]}\033[0m"
+		    ;;
+		CYGWIN*|MINGW32*|MSYS*)
+		    KERNEL_NAME="MS"
+		    echo "  (MS Windows detected. Please install ${PREREQUISITES[$i]} manually)"
+		    ;;
+		*)
+		    echo "  (Not able to decide which system are you using)"
+		    ;;
+	    esac   
 	fi
     done
+
+    if [ "$all_met" = false ]; then
+	exit 1
+    fi
 
     if [ -x "$(command -v ${NRF_TOOL_NAME})" ]; then
 	NRF_TOOL_INSTALLED=true
@@ -160,7 +185,7 @@ thingy_sdk_change()
 finish()
 {
     echo -e "\n \033[1mAll done. You're now ready to compile the SDK and begin your" \
-	 "BLEnd development (with the template project).\033[0m"
+	 "BLEnd development (with the template project)\033[0m."
 
     if [ ! "$NRF_TOOL_INSTALLED" == true ]; then
 	echo -e "\n -[nRF5x Command Line Tools] is not installed. Follow ${TOOLCHAIN_URL}" \
