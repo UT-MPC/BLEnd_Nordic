@@ -99,9 +99,9 @@ static ble_gap_adv_data_t _blend_adv_data =
 // Scheduler parameters
 static uint16_t _epoch_length_ms = 2000;
 static uint16_t _adv_interval_ms = 100;
-static uint16_t _scan_during_in_ms = 120;
+static uint16_t _scan_duration_ms = 120;
 static int _mid_beacon = 0 ;
-uint8_t * _special_beacons;
+uint8_t * _shadow_beacons;
 static uint8_t _blend_mode = BLEND_MODE_FULL;
 static blend_evt_handler_t _blend_evt_handler;
 // Scheduler local variables
@@ -111,7 +111,7 @@ static uint8_t _blend_sent_beacon_count = 0;
 static ble_gap_adv_params_t _blend_adv_params;
 static uint8_t _epoch_flag = 0;
 
-uint8_t _blend_beacon_info[31];
+uint8_t _blend_beacon_content[31];
 
 APP_TIMER_DEF (scan_timer);
 APP_TIMER_DEF (half_epoch_timer);
@@ -146,18 +146,18 @@ void advertising_set(void)
 {
   uint32_t err_code;
   // Set the flags.
-  _blend_beacon_info[0] = 0x02;
-  _blend_beacon_info[1] = 0x01;
-  _blend_beacon_info[2] = 0x04;
+  _blend_beacon_content[0] = 0x02;
+  _blend_beacon_content[1] = 0x01;
+  _blend_beacon_content[2] = 0x04;
 	
   // Length of user payload.
-  _blend_beacon_info[3] = BEACON_SIZE_B - 4;
+  _blend_beacon_content[3] = BEACON_SIZE_B - 4;
   // Set protocol identifier
-  _blend_beacon_info[4] = BLEND_IDENTIFIER;
+  _blend_beacon_content[4] = BLEND_IDENTIFIER;
 #if _BLEND_SCAN_RSP == 0
-  err_code = sd_ble_gap_adv_data_set(_blend_beacon_info, BEACON_SIZE_B, NULL, 0);
+  err_code = sd_ble_gap_adv_data_set(_blend_beacon_content, BEACON_SIZE_B, NULL, 0);
 #else
-  err_code = sd_ble_gap_adv_data_set(_blend_beacon_info, BEACON_SIZE_B, _blend_beacon_info + 3, 28);
+  err_code = sd_ble_gap_adv_data_set(_blend_beacon_content, BEACON_SIZE_B, _blend_beacon_content + 3, 28);
 #endif
   _blend_adv_upload_flag = false;
   APP_ERROR_CHECK(err_code);
@@ -191,8 +191,8 @@ void blend_parse(ble_gap_evt_adv_report_t const * p_adv_report) {
 	if (countdown == 0xffff) {
 	  countdown =0;
 	}
-	countdown = countdown - _scan_during_in_ms + APP_TIMER_MS(app_timer_cnt_diff_compute(now_time, _blend_epoch_start));
-	_special_beacons[countdown / _adv_interval_ms +1] = 1;
+	countdown = countdown - _scan_duration_ms + APP_TIMER_MS(app_timer_cnt_diff_compute(now_time, _blend_epoch_start));
+	_shadow_beacons[countdown / _adv_interval_ms +1] = 1;
       }
       blend_evt_t new_blend_evt;
       new_blend_evt.evt_id = BLEND_EVT_ADV_REPORT;
@@ -215,7 +215,7 @@ void advertising_set(void) {
   ble_advdata_manuf_data_t manuf_specific_data;
 
   manuf_specific_data.company_identifier = BLEND_IDENTIFIER;
-  manuf_specific_data.data.p_data = (uint8_t *) _blend_beacon_info;
+  manuf_specific_data.data.p_data = (uint8_t *) _blend_beacon_content;
   manuf_specific_data.data.size = BEACON_SIZE_B;
 
   memset(&advdata, 0, sizeof(advdata));
@@ -259,8 +259,8 @@ void blend_parse(ble_gap_evt_adv_report_t const * p_adv_report) {
 	   if (countdown == 0xffff) {
 	     countdown =0;
 	   }
-	   countdown = countdown - _scan_during_in_ms + APP_TIMER_MS(app_timer_cnt_diff_compute(now_time, _blend_epoch_start));
-	   _special_beacons[countdown / _adv_interval_ms +1] = 1;
+	   countdown = countdown - _scan_duration_ms + APP_TIMER_MS(app_timer_cnt_diff_compute(now_time, _blend_epoch_start));
+	   _shadow_beacons[countdown / _adv_interval_ms +1] = 1;
 				
 	   blend_evt_t new_blend_evt;
 	   new_blend_evt.evt_id = BLEND_EVT_ADV_REPORT;
@@ -408,12 +408,11 @@ void beacon_slack_timer_handler(void) {
 void advertising_start(void) {
   ret_code_t err_code;
   uint32_t slack_during = _blend_get_random(0,10);
-  if (_blend_on_beacon_flag == 0){
-    if (slack_during == 0){
+  if (_blend_on_beacon_flag == 0) {
+    if (slack_during == 0) {
       beacon_slack_timer_handler();
-    }
-    else{
-      err_code =app_timer_start(beacon_slack_timer,APP_TIMER_TICKS(slack_during),NULL);
+    } else {
+      err_code = app_timer_start(beacon_slack_timer,APP_TIMER_TICKS(slack_during),NULL);
       APP_ERROR_CHECK(err_code);
     }	
   }
@@ -421,11 +420,11 @@ void advertising_start(void) {
 }
 
 void advertising_stop(void) {
-  if (_blend_on_beacon_flag ==1){
+  if (_blend_on_beacon_flag == 1) {
     _blend_beacon_sd_stop();
     _blend_on_beacon_flag = 0;
   }
-  if (_blend_adv_upload_flag){
+  if (_blend_adv_upload_flag) {
     advertising_set();
   }
 }
@@ -437,8 +436,8 @@ void beacon_count_set(int num) {
     now_countdown = ONE_BEACON_MS;
   }
   if (_blend_mode == BLEND_MODE_BI){
-    _blend_beacon_info[_blend_reserved_idx] = (now_countdown & 0xff00) >> 8;
-    _blend_beacon_info[_blend_reserved_idx+1] = now_countdown & 0xff;
+    _blend_beacon_content[_blend_reserved_idx] = (now_countdown & 0xff00) >> 8;
+    _blend_beacon_content[_blend_reserved_idx+1] = now_countdown & 0xff;
   }
   advertising_set();
 }
@@ -447,10 +446,10 @@ void one_beacon_timer_handler() {
   ret_code_t ret;
   advertising_stop();
   if (_epoch_flag == 1){
-    _blend_epoch_start = app_timer_cnt_get();	
+    _blend_epoch_start = app_timer_cnt_get();
     _blend_scan_sd_start();
     NRF_LOG_DEBUG("In Blend module: scan start");
-    ret =app_timer_start(scan_timer,APP_TIMER_TICKS(_scan_during_in_ms),NULL);
+    ret =app_timer_start(scan_timer,APP_TIMER_TICKS(_scan_duration_ms), NULL);
     APP_ERROR_CHECK(ret);
   }
 }
@@ -460,7 +459,7 @@ void scan_prepare(void) {
   ret_code_t ret;
   beacon_count_set(-1);
   beacon_slack_timer_handler();
-  ret = app_timer_start(one_beacon_timer,APP_TIMER_TICKS(ONE_BEACON_MS),NULL);
+  ret = app_timer_start(one_beacon_timer,APP_TIMER_TICKS(ONE_BEACON_MS), NULL);
   APP_ERROR_CHECK(ret);
 }
 
@@ -477,7 +476,7 @@ void scan_timer_handler(void* p_context) {
   scan_stop();
   ret=app_timer_stop(scan_timer);
   APP_ERROR_CHECK(ret);
-  ret_code_t err_code =app_timer_start(beacon_count_timer,APP_TIMER_TICKS (_adv_interval_ms),NULL);
+  ret_code_t err_code =app_timer_start(beacon_count_timer,APP_TIMER_TICKS (_adv_interval_ms), NULL);
   APP_ERROR_CHECK(err_code);
   _blend_sent_beacon_count = 0;
   beacon_count_set (_blend_sent_beacon_count);
@@ -491,12 +490,12 @@ void scan_timer_handler(void* p_context) {
   (*_blend_evt_handler) ( &new_blend_evt);
 }
 
-void half_epoch_timer_handler (void * p_context) {
+void half_epoch_timer_handler (void* p_context) {
   ret_code_t err_code;
   if (_epoch_flag == 0) {
     _epoch_flag = 1;
     advertising_stop();
-    memset(_special_beacons, 0, (ROUNDED_DIV(_epoch_length_ms , _adv_interval_ms) + 2) * sizeof(_special_beacons[0]));
+    memset(_shadow_beacons, 0, (ROUNDED_DIV(_epoch_length_ms , _adv_interval_ms) + 2) * sizeof(_shadow_beacons[0]));
     //Call blend handler
     blend_evt_t new_blend_evt;
     new_blend_evt.evt_id = BLEND_EVT_EPOCH_START;
@@ -517,11 +516,11 @@ void beacon_count_timer_handler (void * p_context) {
   _blend_sent_beacon_count += 1;
   beacon_count_set (_blend_sent_beacon_count);
 	
-  if ((_blend_sent_beacon_count <= _mid_beacon) || (_blend_mode == 1)) {
+  if (_blend_sent_beacon_count <= _mid_beacon || _blend_mode == 1) {
     advertising_start();	
   }
 
-  if ((_blend_sent_beacon_count > _mid_beacon) && (_special_beacons[_blend_sent_beacon_count] == 1) && (_blend_mode == 3)) {
+  if (_blend_sent_beacon_count > _mid_beacon && _shadow_beacons[_blend_sent_beacon_count] == 1 && _blend_mode == 3) {
     advertising_start();
   }
 }
@@ -529,7 +528,7 @@ void beacon_count_timer_handler (void * p_context) {
 void blend_sched_start() {
   ret_code_t err_code;
   _epoch_flag = 1;
-  err_code=app_timer_start(half_epoch_timer,APP_TIMER_TICKS(_epoch_length_ms /2),NULL);
+  err_code=app_timer_start(half_epoch_timer,APP_TIMER_TICKS(_epoch_length_ms /2), NULL);
   APP_ERROR_CHECK(err_code);
   scan_prepare();
 }
@@ -559,9 +558,9 @@ void blend_timer_set(void) {
 void blend_param_set(blend_param_t input) {
   _epoch_length_ms = input.epoch_length_ms;
   _adv_interval_ms = input.adv_interval_ms;
-  _scan_during_in_ms = (_adv_interval_ms + 5 + 10);
-  _special_beacons = (uint8_t *) malloc( (ROUNDED_DIV(_epoch_length_ms , _adv_interval_ms) + 2) * sizeof(uint8_t)) ;
-  _mid_beacon = ((_epoch_length_ms / 2) - _scan_during_in_ms + _adv_interval_ms / 2 ) / _adv_interval_ms ;
+  _scan_duration_ms = (_adv_interval_ms + 5 + 10);
+  _shadow_beacons = (uint8_t *) malloc( (ROUNDED_DIV(_epoch_length_ms , _adv_interval_ms) + 2) * sizeof(uint8_t)) ;
+  _mid_beacon = ((_epoch_length_ms / 2) - _scan_duration_ms + _adv_interval_ms / 2 ) / _adv_interval_ms ;
   _blend_mode = input.blend_mode;
 }
 
@@ -569,7 +568,7 @@ blend_ret_t blend_advdata_set(blend_data_t *input) {
   uint8_t dlen = input->data_length;
   uint8_t * payload = input->data;
 	
-  if (dlen > BLEND_USER_PAYLOAD_SIZE){
+  if (dlen > BLEND_USER_PAYLOAD_SIZE) {
     return BLEND_DATA_OVERFLOW;
   }
 	
@@ -578,11 +577,10 @@ blend_ret_t blend_advdata_set(blend_data_t *input) {
       return BLEND_BI_DIR_OVERFLOW;
     }
   }
-  for (int i = 0; i < dlen; i++)
-    {
-      _blend_beacon_info[_blend_payload_index + i] = payload[i];
+  for (int i = 0; i < dlen; i++) {
+      _blend_beacon_content[_blend_payload_index + i] = payload[i];
     }
-  if (_blend_on_beacon_flag ==1){
+  if (_blend_on_beacon_flag ==1) {
     _blend_adv_upload_flag = true;
   } else {
     advertising_set();
@@ -600,7 +598,7 @@ void blend_init(blend_param_t input, blend_evt_handler_t handler) {
   advertising_init();
   blend_timer_set();
   _blend_evt_handler = handler;
-  memset(_blend_beacon_info, 0, sizeof(_blend_beacon_info));
+  memset(_blend_beacon_content, 0, sizeof(_blend_beacon_content));
   NRF_LOG_DEBUG("Blend init finished\n");
 }
 #endif
@@ -613,7 +611,7 @@ void blend_init(blend_param_t input, blend_evt_handler_t handler) {
   advertising_init();
   blend_timer_set();
   _blend_evt_handler = handler;
-  memset(_blend_beacon_info, 0, sizeof(_blend_beacon_info));
+  memset(_blend_beacon_content, 0, sizeof(_blend_beacon_content));
 }
 #endif
 
@@ -626,6 +624,6 @@ void blend_init(blend_param_t input, blend_evt_handler_t handler, m_ble_service_
   advertising_init();
   blend_timer_set();
   _blend_evt_handler = handler;
-  memset(_blend_beacon_info, 0, sizeof(_blend_beacon_info));
+  memset(_blend_beacon_content, 0, sizeof(_blend_beacon_content));
 }
 #endif
