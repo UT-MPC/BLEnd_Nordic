@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 #include "app_error.h"
 #include "app_timer.h"
 #include "ble.h"

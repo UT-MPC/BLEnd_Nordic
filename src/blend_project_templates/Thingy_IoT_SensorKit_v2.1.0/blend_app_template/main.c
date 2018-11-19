@@ -43,161 +43,122 @@
  * This file contains the source code for the Blend template application on Thingy. 
  */
 #define BLEND_THINGY_SDK
-#include <stdint.h>
 #include <float.h>
+#include <stdint.h>
 #include <string.h>
-#include "nordic_common.h"
-#include "nrf.h"
-#include "ble_hci.h"
+
+#include "app_button.h"
+#include "app_error.h"
+#include "app_scheduler.h"
+#include "app_timer.h"
+#include "app_util_platform.h"
+#include "ble.h"
+#include "ble_advdata.h"
 #include "ble_advdata.h"
 #include "ble_advertising.h"
 #include "ble_conn_params.h"
-#include "softdevice_handler.h"
-#include "app_scheduler.h"
-#include "app_button.h"
-#include "app_util_platform.h"
-#include "m_ble.h"
-#include "m_environment.h"
-#include "m_sound.h"
-#include "m_motion.h"
-#include "m_ui.h"
-#include "m_batt_meas.h"
-#include "drv_ext_light.h"
-#include "drv_ext_gpio.h"
-#include "nrf_delay.h"
-#include "twi_manager.h"
-#include "support_func.h"
-#include "pca20020.h"
-#include "app_error.h"
-#include "ble.h"
-//////////////////////////////////BLE lib
-#include "ble.h"
-#include "app_timer.h"
-#include "ble_advdata.h"
+#include "ble_hci.h"
 #include "ble_uis.h"
 #include "blend.h"
-////////////////////
+#include "drv_ext_gpio.h"
+#include "drv_ext_light.h"
+#include "m_batt_meas.h"
+#include "m_ble.h"
+#include "m_environment.h"
+#include "m_motion.h"
+#include "m_sound.h"
+#include "m_ui.h"
+#include "nordic_common.h"
+#include "nrf.h"
+#include "nrf_delay.h"
+#include "pca20020.h"
+#include "softdevice_handler.h"
+#include "support_func.h"
+#include "twi_manager.h"
+
 #define  NRF_LOG_MODULE_NAME "main          "
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
 
-#define DEAD_BEEF   0xDEADBEEF          /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
-#define SCHED_MAX_EVENT_DATA_SIZE   MAX(APP_TIMER_SCHED_EVENT_DATA_SIZE, BLE_STACK_HANDLER_SCHED_EVT_SIZE) /**< Maximum size of scheduler events. */
-#define SCHED_QUEUE_SIZE            60  /**< Maximum number of events in the scheduler queue. */
+//! Value used as error code on stack dump, can be used to identify stack location on stack unwind.
+#define DEAD_BEEF 0xDEADBEEF
+//! Maximum size of scheduler events.
+#define SCHED_MAX_EVENT_DATA_SIZE MAX(APP_TIMER_SCHED_EVENT_DATA_SIZE, BLE_STACK_HANDLER_SCHED_EVT_SIZE)
+//! Maximum number of events in the scheduler queue.
+#define SCHED_QUEUE_SIZE 60
 
-
-
-///////////////////////////////////////////////////////////////////////////////////BLE defined
-
-//#define m_epoch_during 2000
-//#define m_beacon_interval 77
+//! BLEnd parameters {Epoch, Adv. interval, mode}.
 blend_param_t m_blend_param = { 2000, 77, BLEND_MODE_FULL};
-#define APP_DEVICE_NUM                  0x02                              
-#define MAX_DEVICE						10
-#define m_data_len 						7 
-#define discover_index					1
+#define APP_DEVICE_NUM 0x01
+#define MAX_DEVICE 10
+#define m_data_len 7
+#define discover_index 1
+
+#define LED_CONFIG_GREEN			\
+  {						\
+    .mode = BLE_UIS_LED_MODE_CONST,		\
+      .data =					\
+      {						\
+        .mode_const =				\
+        {					\
+	  .r  = 11,				\
+	  .g  = 102,				\
+	  .b  = 35				\
+        }					\
+      }						\
+  }
+
+#define LED_CONFIG_PURPLE			\
+  {						\
+    .mode = BLE_UIS_LED_MODE_CONST,		\
+      .data =					\
+      {						\
+        .mode_const =				\
+        {					\
+	  .r  = 75,				\
+	  .g  = 0,				\
+	  .b  = 130				\
+        }					\
+      }						\
+  }
+
+#define LED_CONFIG_RED				\
+  {						\
+    .mode = BLE_UIS_LED_MODE_CONST,		\
+      .data =					\
+      {						\
+        .mode_const =				\
+        {					\
+	  .r  = 177,				\
+	  .g  = 0,				\
+	  .b  = 0				\
+        }					\
+      }						\
+  }
+
+//! Discovered device count.
 uint8_t payload[m_data_len] = {APP_DEVICE_NUM,
-									0x00, 0x00,
-									0x00, 0x00,
-									0x00, 0x00};						/* Discovered Device Count*/
+			       0x00, 0x00,
+			       0x00, 0x00,
+			       0x00, 0x00};
 blend_data_t m_blend_data;
-									
+				
 uint32_t start_tick = 0;
 static uint32_t epoch_count = 0;
-uint8_t found_device[MAX_DEVICE];
+// uint8_t found_device[MAX_DEVICE];
 
 static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
 
-
-
-#define UI_CONFIG_DEFAULT_BLEND_IDLE                                 \
-{                                                               \
-    .mode = BLE_UIS_LED_MODE_CONST,                           \
-    .data =                                                     \
-    {                                                           \
-        .mode_const =                                         \
-        {                                                       \
-            .r  = 40,     \
-            .g  = 40,        \
-            .b  = 0           \
-        }                                                       \
-    }                                                           \
-}
-#define UI_CONFIG_DEFAULT_BLEND_START                                 \
-{                                                               \
-    .mode = BLE_UIS_LED_MODE_BREATHE_ONE_SHOT,                           \
-    .data =                                                     \
-    {                                                           \
-        .mode_const =                                         \
-        {                                                       \
-            .r  = 0,     \
-            .g  = 0,        \
-            .b  = 255           \
-        }                                                       \
-    }                                                           \
-}
-#define UI_CONFIG_DEFAULT_BLEND_SCAN                                 \
-{                                                               \
-    .mode = BLE_UIS_LED_MODE_CONST,                           \
-    .data =                                                     \
-    {                                                           \
-        .mode_const =                                         \
-        {                                                       \
-            .r  = 80,     \
-            .g  = 0,        \
-            .b  = 0           \
-        }                                                       \
-    }                                                           \
-}
-#define UI_CONFIG_DEFAULT_BLEND_ADV                                \
-{                                                               \
-    .mode = BLE_UIS_LED_MODE_CONST,                           \
-    .data =                                                     \
-    {                                                           \
-        .mode_const =                                         \
-        {                                                       \
-            .r  = 0,     \
-            .g  = 80,        \
-            .b  = 0           \
-        }                                                       \
-    }                                                           \
-}
 uint8_t found_device[MAX_DEVICE] = {0,0,0};
 
-
-static const ble_uis_led_t m_led_idle        = UI_CONFIG_DEFAULT_BLEND_IDLE;
-static const ble_uis_led_t m_led_scan        = UI_CONFIG_DEFAULT_BLEND_SCAN;
-static const ble_uis_led_t m_led_adv        = UI_CONFIG_DEFAULT_BLEND_ADV;
-static const ble_uis_led_t m_led_start        = UI_CONFIG_DEFAULT_BLEND_START;
-
+static const ble_uis_led_t m_led_scan = LED_CONFIG_PURPLE;
+static const ble_uis_led_t m_led_adv = LED_CONFIG_GREEN;
 
 uint8_t on_scan_flag  = 0;
 uint8_t discovered = 0;
 bool discover_mode = true;
-//////////////////////////////////////////////////////////////////////////////////////////
-static int get_random(int start,int end){
-	
-	uint8_t random_number[4];
-	ret_code_t err_code;
-	uint8_t pool_avail = 0;
-	
-	
-	//if there is a randon number available
-	while (pool_avail <4)
-    {
-		err_code = sd_rand_application_bytes_available_get(&pool_avail);
-		APP_ERROR_CHECK(err_code);       
-    }
-	err_code = sd_rand_application_vector_get(random_number, 4);
-    APP_ERROR_CHECK(err_code);
-	int dice = abs(random_number[0]+(random_number[1]<<8)+(random_number[2]<<16) + (random_number[3]<<24));
-	return (int)(dice % (end-start))+start;
-}
 
-
-
-
-static const nrf_drv_twi_t     m_twi_sensors = NRF_DRV_TWI_INSTANCE(TWI_SENSOR_INSTANCE);
+static const nrf_drv_twi_t m_twi_sensors = NRF_DRV_TWI_INSTANCE(TWI_SENSOR_INSTANCE);
 
 void app_error_fault_handler(uint32_t id, uint32_t pc, uint32_t info)
 {
@@ -237,48 +198,48 @@ void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
  *
  * @note This function will not return.
  */
-static void sleep_mode_enter(void)
-{
-    uint32_t err_code;
+/* static void sleep_mode_enter(void) */
+/* { */
+/*     uint32_t err_code; */
 
-    NRF_LOG_INFO("Entering sleep mode \r\n");
-    err_code = m_motion_sleep_prepare(true);
-    APP_ERROR_CHECK(err_code);
+/*     NRF_LOG_INFO("Entering sleep mode \r\n"); */
+/*     err_code = m_motion_sleep_prepare(true); */
+/*     APP_ERROR_CHECK(err_code); */
 
-    err_code = support_func_configure_io_shutdown();
-    APP_ERROR_CHECK(err_code);
+/*     err_code = support_func_configure_io_shutdown(); */
+/*     APP_ERROR_CHECK(err_code); */
     
-    // Enable wake on button press.
-    nrf_gpio_cfg_sense_input(BUTTON, NRF_GPIO_PIN_PULLUP, NRF_GPIO_PIN_SENSE_LOW);
-    // Enable wake on low power accelerometer.
-    nrf_gpio_cfg_sense_input(LIS_INT1, NRF_GPIO_PIN_NOPULL, NRF_GPIO_PIN_SENSE_HIGH);
+/*     // Enable wake on button press. */
+/*     nrf_gpio_cfg_sense_input(BUTTON, NRF_GPIO_PIN_PULLUP, NRF_GPIO_PIN_SENSE_LOW); */
+/*     // Enable wake on low power accelerometer. */
+/*     nrf_gpio_cfg_sense_input(LIS_INT1, NRF_GPIO_PIN_NOPULL, NRF_GPIO_PIN_SENSE_HIGH); */
    
-    NRF_LOG_FLUSH();
-    nrf_delay_ms(5);
-    // Go to system-off (sd_power_system_off() will not return; wakeup will cause a reset). When debugging, this function may return and code execution will continue.
-    err_code = sd_power_system_off();
-    NRF_LOG_WARNING("sd_power_system_off() returned. -Probably due to debugger being used. Instructions will still run. \r\n");
-    NRF_LOG_FLUSH();
+/*     NRF_LOG_FLUSH(); */
+/*     nrf_delay_ms(5); */
+/*     // Go to system-off (sd_power_system_off() will not return; wakeup will cause a reset). When debugging, this function may return and code execution will continue. */
+/*     err_code = sd_power_system_off(); */
+/*     NRF_LOG_WARNING("sd_power_system_off() returned. -Probably due to debugger being used. Instructions will still run. \r\n"); */
+/*     NRF_LOG_FLUSH(); */
     
-    #ifdef DEBUG
-        if(!support_func_sys_halt_debug_enabled())
-        {
-            APP_ERROR_CHECK(err_code); // If not in debug mode, return the error and the system will reboot.
-        }
-        else
-        {
-            NRF_LOG_WARNING("Exec stopped, busy wait \r\n");
-            NRF_LOG_FLUSH();
+/*     #ifdef DEBUG */
+/*         if(!support_func_sys_halt_debug_enabled()) */
+/*         { */
+/*             APP_ERROR_CHECK(err_code); // If not in debug mode, return the error and the system will reboot. */
+/*         } */
+/*         else */
+/*         { */
+/*             NRF_LOG_WARNING("Exec stopped, busy wait \r\n"); */
+/*             NRF_LOG_FLUSH(); */
             
-            while(true) // Only reachable when entering emulated system off.
-            {
-                // Infinte loop to ensure that code stops in debug mode.
-            }
-        }
-    #else
-        APP_ERROR_CHECK(err_code);
-    #endif
-}
+/*             while(true) // Only reachable when entering emulated system off. */
+/*             { */
+/*                 // Infinte loop to ensure that code stops in debug mode. */
+/*             } */
+/*         } */
+/*     #else */
+/*         APP_ERROR_CHECK(err_code); */
+/*     #endif */
+/* } */
 
 
 /**@brief Function for placing the application in low power state while waiting for events.
@@ -297,51 +258,48 @@ static void power_manage(void)
 
 /**@brief Battery module data handler.
  */
-static void m_batt_meas_handler(m_batt_meas_event_t const * p_batt_meas_event)
-{
-	NRF_LOG_INFO("MichHello:Voltage: %d V, Charge: %d %%, Event type: %d \r\n",
-                p_batt_meas_event->voltage_mv, p_batt_meas_event->level_percent, p_batt_meas_event->type);
+/* static void m_batt_meas_handler(m_batt_meas_event_t const * p_batt_meas_event) */
+/* { */
+/* 	NRF_LOG_INFO("MichHello:Voltage: %d V, Charge: %d %%, Event type: %d \r\n", */
+/*                 p_batt_meas_event->voltage_mv, p_batt_meas_event->level_percent, p_batt_meas_event->type); */
    
-    if (p_batt_meas_event != NULL)
-    {
-        if( p_batt_meas_event->type == M_BATT_MEAS_EVENT_LOW)
-        {
-            uint32_t err_code;
+/*     if (p_batt_meas_event != NULL) */
+/*     { */
+/*         if( p_batt_meas_event->type == M_BATT_MEAS_EVENT_LOW) */
+/*         { */
+/*             uint32_t err_code; */
 
-            err_code = support_func_configure_io_shutdown();
-            APP_ERROR_CHECK(err_code);
+/*             err_code = support_func_configure_io_shutdown(); */
+/*             APP_ERROR_CHECK(err_code); */
             
-            // Enable wake on USB detect only.
-            nrf_gpio_cfg_sense_input(USB_DETECT, NRF_GPIO_PIN_NOPULL, NRF_GPIO_PIN_SENSE_HIGH);
+/*             // Enable wake on USB detect only. */
+/*             nrf_gpio_cfg_sense_input(USB_DETECT, NRF_GPIO_PIN_NOPULL, NRF_GPIO_PIN_SENSE_HIGH); */
 
-            NRF_LOG_WARNING("Battery voltage low, shutting down Thingy. Connect USB to charge \r\n");
-            NRF_LOG_FINAL_FLUSH();
-            // Go to system-off mode (This function will not return; wakeup will cause a reset).
-            err_code = sd_power_system_off();
+/*             NRF_LOG_WARNING("Battery voltage low, shutting down Thingy. Connect USB to charge \r\n"); */
+/*             NRF_LOG_FINAL_FLUSH(); */
+/*             // Go to system-off mode (This function will not return; wakeup will cause a reset). */
+/*             err_code = sd_power_system_off(); */
 
-            #ifdef DEBUG
-                if(!support_func_sys_halt_debug_enabled())
-                {
-                    APP_ERROR_CHECK(err_code); // If not in debug mode, return the error and the system will reboot.
-                }
-                else
-                {
-                    NRF_LOG_WARNING("Exec stopped, busy wait \r\n");
-                    NRF_LOG_FLUSH();
-                    while(true) // Only reachable when entering emulated system off.
-                    {
-                        // Infinte loop to ensure that code stops in debug mode.
-                    }
-                }
-            #else
-                APP_ERROR_CHECK(err_code);
-            #endif
-        }
-    }
-}
-
-
-
+/*             #ifdef DEBUG */
+/*                 if(!support_func_sys_halt_debug_enabled()) */
+/*                 { */
+/*                     APP_ERROR_CHECK(err_code); // If not in debug mode, return the error and the system will reboot. */
+/*                 } */
+/*                 else */
+/*                 { */
+/*                     NRF_LOG_WARNING("Exec stopped, busy wait \r\n"); */
+/*                     NRF_LOG_FLUSH(); */
+/*                     while(true) // Only reachable when entering emulated system off. */
+/*                     { */
+/*                         // Infinte loop to ensure that code stops in debug mode. */
+/*                     } */
+/*                 } */
+/*             #else */
+/*                 APP_ERROR_CHECK(err_code); */
+/*             #endif */
+/*         } */
+/*     } */
+/* } */
 
 static void thingy_init(void)
 {
@@ -362,10 +320,8 @@ static void thingy_init(void)
                          &ui_params);
     APP_ERROR_CHECK(err_code);
 
-///////////////////////////////////////////////////
-
-    err_code = led_set(&m_led_idle,NULL);
-    APP_ERROR_CHECK(err_code);
+    /* err_code = led_set(&m_led_idle,NULL); */
+    /* APP_ERROR_CHECK(err_code); */
 }
 
 static void board_init(void)
@@ -409,85 +365,73 @@ static void timer_init(void)
     APP_ERROR_CHECK(err_code);
 }
 
-/**@brief Application main function.
- */
-
-static void restart_timer_handler(void* p_context){
-		for (int i = 0; i < MAX_DEVICE; i ++)
-		{
-				if (i == (APP_DEVICE_NUM - 1)){
-					continue;
-				}
-				if (found_device[i] == 0){
-					NRF_LOG_INFO(NRF_LOG_COLOR_CODE_RED"===Fail to find device %d ===\r\n", i+1);
-				}
-		}
-		nrf_delay_ms(100);
-		sd_nvic_SystemReset();
-}
-
-
+/* static void restart_timer_handler(void* p_context){ */
+/*   for (int i = 0; i < MAX_DEVICE; i ++) */
+/*     { */
+/*       if (i == (APP_DEVICE_NUM - 1)){ */
+/* 	continue; */
+/*       } */
+/*       if (found_device[i] == 0){ */
+/* 	NRF_LOG_INFO(NRF_LOG_COLOR_CODE_RED"===Fail to find device %d ===\r\n", i+1); */
+/*       } */
+/*     } */
+/*   nrf_delay_ms(100); */
+/*   sd_nvic_SystemReset(); */
+/* } */
 
 static void run_test(){
-
-	ret_code_t err_code;
-	memset(&found_device, 0, sizeof(found_device));
-	start_tick = app_timer_cnt_get();
-	blend_sched_start();
+  ret_code_t err_code;
+  memset(&found_device, 0, sizeof(found_device));
+  start_tick = app_timer_cnt_get();
+  blend_sched_start();
 }
+
 static void set_blend_data()
 {
-	m_blend_data.data_length = m_data_len;
-	m_blend_data.data = payload;
-	if (blend_advdata_set(&m_blend_data) != BLEND_NO_ERROR)
-	{
-		NRF_LOG_ERROR("Blend data set error")
-	}
+  m_blend_data.data_length = m_data_len;
+  m_blend_data.data = payload;
+  if (blend_advdata_set(&m_blend_data) != BLEND_NO_ERROR) {
+    NRF_LOG_ERROR("Blend data set error");
+  }
 }
 
 static void m_blend_handler(blend_evt_t * p_blend_evt)
 {
-	if (p_blend_evt->evt_id == BLEND_EVT_ADV_REPORT)
-	{
-		uint8_t * p_data = p_blend_evt->evt_data.data;
-		uint8_t dlen = p_blend_evt->evt_data.data_length;
-		//NRF_LOG_HEXDUMP_INFO(p_data, dlen);
-		int now_device=p_data[0];
-		uint32_t now_time = app_timer_cnt_get();
-		uint8_t dis_flag = 0;
-		//if (found_device[now_device -1 ] == 1 ) dis_flag = 1;
-		if (dis_flag == 0) {
-			found_device[now_device -1 ] = 1;
-			uint32_t time = app_timer_cnt_diff_compute(now_time,start_tick);
-			time = APP_TIMER_MS(time) & 0xffff;
-			NRF_LOG_INFO(NRF_LOG_COLOR_CODE_GREEN"===Found device %d At time: %d===\r\n", now_device,time);
-		}
-		return;
-	}
-	if (p_blend_evt->evt_id == BLEND_EVT_EPOCH_START)
-	{
-		epoch_count += 1;
-		ret_code_t err_code = led_set(&m_led_scan,NULL);
-		NRF_LOG_INFO(NRF_LOG_COLOR_CODE_GREEN"Epoch %d started.\r\n", epoch_count);
-		APP_ERROR_CHECK(err_code);
-	}	
-	if (p_blend_evt->evt_id == BLEND_EVT_AFTER_SCAN)
-	{
-		ret_code_t err_code = led_set(&m_led_adv,NULL);
-		NRF_LOG_INFO("Scan stopped.\r\n", epoch_count);
-		APP_ERROR_CHECK(err_code);
-	}
+  if (p_blend_evt->evt_id == BLEND_EVT_ADV_REPORT) {
+      uint8_t * p_data = p_blend_evt->evt_data.data;
+      uint8_t dlen = p_blend_evt->evt_data.data_length;
+      int nbgr_id = p_data[0];
+      uint32_t now_time = app_timer_cnt_get();
+      uint8_t dis_flag = 0;
+      if (dis_flag == 0) {
+	found_device[nbgr_id - 1] = 1;
+	uint32_t time = app_timer_cnt_diff_compute(now_time, start_tick);
+	time = APP_TIMER_MS(time) & 0xffff;
+	NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN"===Found device %d At time: %d===\r\n", nbgr_id, time);
+      }
+      return;
+    }
+  if (p_blend_evt->evt_id == BLEND_EVT_EPOCH_START) {
+      epoch_count += 1;
+      ret_code_t err_code = led_set(&m_led_scan,NULL);
+      NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN"Epoch %d started.\r\n", epoch_count);
+      APP_ERROR_CHECK(err_code);
+    }	
+  if (p_blend_evt->evt_id == BLEND_EVT_AFTER_SCAN) {
+      ret_code_t err_code = led_set(&m_led_adv,NULL);
+      NRF_LOG_DEBUG("Scan stopped.\r\n", epoch_count);
+      APP_ERROR_CHECK(err_code);
+    }
 }
-int main(void)
-{
+
+int main(void) {
     uint32_t err_code;
     err_code = NRF_LOG_INIT(NULL);
     APP_ERROR_CHECK(err_code);
 		timer_init();
 	
-    NRF_LOG_INFO("===== Blend mode %d started! =====\r\n", m_blend_param.blend_mode);
-    //led_set(&m_led_start,NULL);
-    // Initialize.
+    // NRF_LOG_DEBUG("===== Blend mode %d started! =====\r\n", m_blend_param.blend_mode);
+    
     APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
     err_code = app_timer_init();
     APP_ERROR_CHECK(err_code);
@@ -495,10 +439,11 @@ int main(void)
     board_init();
     thingy_init();
 	
-	blend_init(m_blend_param, m_blend_handler, m_ble_service_handles);
-	set_blend_data();
-
-	run_test();
+    blend_init(m_blend_param, m_blend_handler, m_ble_service_handles);
+    set_blend_data();
+    
+    run_test();
+    
     for (;;)
     {
         app_sched_execute();
