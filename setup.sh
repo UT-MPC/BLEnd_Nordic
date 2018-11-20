@@ -13,6 +13,7 @@ declare -a SDK_ADDR=("https://developer.nordicsemi.com/nRF5_SDK/nRF5_SDK_v15.x.x
 		    )
 declare -a SDK_NAMES=("nRF5_SDK_v15" "nRF5_SDK_v14" "Thingy_IoT_SensorKit_v2.1.0")
 declare -a THINGY_SDK_CHANGES=("include" "source")
+declare -a TEMPLATE_PROJECTS=("blend_app_template" "percom_demo")
 
 ARCHIVE_NAME="@ARCHIVE_NAME@"
 BLEND_SRC_DIR="src/blend"
@@ -162,12 +163,16 @@ add_template_project()
 	exit 1
     fi
 
-    temp_dir="${BLEND_TEMP_ORI_LOCATION}/${SDK_NAMES[$SDK_VERSION]}/${BLEND_TEMP_NAME}"
-
-    cp -r "${temp_dir}" "${proj_dir}"
+    for (( i=0; i<${#TEMPLATE_PROJECTS[@]};i++ ));
+    do
+	example_proj_name="${TEMPLATE_PROJECTS[$i]}"
+	temp_dir="${BLEND_TEMP_ORI_LOCATION}/${SDK_NAMES[$SDK_VERSION]}/${example_proj_name}"
+	cp -r "${temp_dir}" "${proj_dir}"
+    done
 
     if [ -d "${proj_dir}/${BLEND_TEMP_NAME}" ]; then
-	echo -e " Done. \n Template project location: \033[1m${proj_dir}/${BLEND_TEMP_NAME}\033[0m"
+	echo -e " Done. \n Template project location:"\
+	     " \033[1m${proj_dir}/${TEMPLATE_PROJECTS[0]}\033[0m"
     fi
 }
 
@@ -193,8 +198,8 @@ finish()
     fi
 
     if [ "${SDK_VERSION}" -eq 2 ]; then
-	echo -e "\n (Guide for setting up Thingy SDK: ${COMPILE_THINGY_SDK_URL})"
-	echo -e " (Guide for compiling Thingy firmware: ${COMPILE_THINGY_URL})"
+	echo -e "\n (Guide for setting up Thingy SDK: ${COMPILE_THINGY_SDK_URL})" \
+	     "\n (Guide for compiling Thingy firmware: ${COMPILE_THINGY_URL})"
     else
 	echo -e "\n (Guide for compiling nRF5x SDK: ${COMPLIE_NRF52_URL})"
     fi
