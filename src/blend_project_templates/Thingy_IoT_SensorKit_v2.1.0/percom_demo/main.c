@@ -46,6 +46,8 @@
 #include <float.h>
 #include <stdint.h>
 #include <string.h>
+#include "light_control.h"
+#include "sensor.h"
 
 #include "app_button.h"
 #include "app_error.h"
@@ -64,9 +66,6 @@
 #include "drv_ext_light.h"
 #include "m_batt_meas.h"
 #include "m_ble.h"
-#include "m_environment.h"
-#include "m_motion.h"
-#include "m_sound.h"
 #include "m_ui.h"
 #include "nordic_common.h"
 #include "nrf.h"
@@ -76,7 +75,6 @@
 #include "support_func.h"
 #include "twi_manager.h"
 
-#define  NRF_LOG_MODULE_NAME "main          "
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
 
@@ -94,61 +92,6 @@
 //! BLEnd parameters {Epoch, Adv. interval, mode}.
 blend_param_t m_blend_param = { 2000, 77, BLEND_MODE_FULL};
 
-#define LED_CONFIG_GREEN			\
-  {						\
-    .mode = BLE_UIS_LED_MODE_CONST,		\
-      .data =					\
-      {						\
-        .mode_const =				\
-        {					\
-	  .r  = 11,				\
-	  .g  = 102,				\
-	  .b  = 35				\
-        }					\
-      }						\
-  }
-
-#define LED_CONFIG_PURPLE			\
-  {						\
-    .mode = BLE_UIS_LED_MODE_CONST,		\
-      .data =					\
-      {						\
-        .mode_const =				\
-        {					\
-	  .r  = 75,				\
-	  .g  = 0,				\
-	  .b  = 130				\
-        }					\
-      }						\
-  }
-
-#define LED_CONFIG_RED				\
-  {						\
-    .mode = BLE_UIS_LED_MODE_CONST,		\
-      .data =					\
-      {						\
-        .mode_const =				\
-        {					\
-	  .r  = 177,				\
-	  .g  = 0,				\
-	  .b  = 0				\
-        }					\
-      }						\
-  }
-
-#define LED_CONFIG_WHITE				\
-  {						\
-    .mode = BLE_UIS_LED_MODE_CONST,		\
-      .data =					\
-      {						\
-        .mode_const =				\
-        {					\
-	  .r  = 255,				\
-	  .g  = 255,				\
-	  .b  = 255,				\
-        }					\
-      }						\
-  }
 
 //! {node_id, task(idx;duration), ctx_val, cap_vec, need_vec}.
 uint8_t payload[DATA_LENGTH] = {DEVICE_ID,
@@ -231,8 +174,6 @@ static void thingy_init(void)
 {
     uint32_t                 err_code;
     m_ui_init_t              ui_params;
-    m_environment_init_t     env_params;
-    m_motion_init_t          motion_params;
     m_ble_init_t             ble_params;
     batt_meas_init_t         batt_meas_init = BATT_MEAS_PARAM_CFG;
 
@@ -294,6 +235,7 @@ static void run_test(){
   memset(&found_device, 0, sizeof(found_device));
   start_tick = app_timer_cnt_get();
   blend_sched_start();
+ 
 }
 
 //! Start inclusive, end exclusive.
@@ -388,7 +330,7 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     
     update_light();
     // Populate the beacon payload.
-    if (update_payload(0, 7, 123, &payload)) {
+    if (update_payload(0, 7, 123, payload)) {
       NRF_LOG_ERROR("Error when updating beacon payload.");
     }
     break;
@@ -396,6 +338,8 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
   case BLEND_EVT_AFTER_SCAN: {
     //ret_code_t err_code = led_set(&m_led_adv,NULL);
     NRF_LOG_DEBUG("Scan stopped.\r\n", epoch_count);
+    m_humidity_sample();
+    m_pressure_sample();
     //APP_ERROR_CHECK(err_code);
     break;
   }
@@ -405,25 +349,31 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
   }
 }
 
+void sensor_init()
+{
+  humidity_sensor_init(&m_twi_sensors);
+  pressure_sensor_init(&m_twi_sensors);
+}
+
 int main(void) {
   uint32_t err_code;
   err_code = NRF_LOG_INIT(NULL);
   APP_ERROR_CHECK(err_code);
   timer_init();
 
-  // NRF_LOG_DEBUG("===== Blend mode %d started! =====\r\n", m_blend_param.blend_mode);
+  NRF_LOG_DEBUG("===== Blend mode %d started! =====\r\n", m_blend_param.blend_mode);
 		
   err_code = nrf_drv_rng_init(NULL);
   APP_ERROR_CHECK(err_code);
 		
-    
+  
   APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
   err_code = app_timer_init();
   APP_ERROR_CHECK(err_code);
 
   board_init();
   thingy_init();
-
+  sensor_init();
   blend_init(m_blend_param, m_blend_handler, m_ble_service_handles);
 
   sharing_task_init();
