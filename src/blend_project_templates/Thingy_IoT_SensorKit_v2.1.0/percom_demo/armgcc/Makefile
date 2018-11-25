@@ -42,7 +42,6 @@ $(abspath ../../../sdk_components/nfc/t2t_lib/nfc_t2t_lib_gcc.a) \
 
 #source common to all targets
 C_SOURCE_FILES += \
-$(abspath ../light_control.c) \
 $(abspath ../main.c) \
 $(abspath ../sensor.c) \
 $(abspath ../../../blend/blend.c) \

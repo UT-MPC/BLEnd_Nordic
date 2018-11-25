@@ -85,23 +85,24 @@
 //! Maximum number of events in the scheduler queue.
 #define SCHED_QUEUE_SIZE 60
 
+#define PROTOCOL_ID 0x8B
 #define DEVICE_ID 0x01
 #define MAX_DEVICE 10
-#define DATA_LENGTH 7
-#define NUM_SENSOR_TYPE 8
+#define DATA_LENGTH 15
+#define NUM_ENABLED_SENSOR 8
+#define NUM_CONTEXT_TYPES 16
+#define TASK_IDLE 0
+
+#define SetBit(A,k) (A |= (1 << (k%NUM_CONTEXT_TYPES)))
+#define ClearBit(A,k) (A &= ~(1 << (k%NUM_CONTEXT_TYPES)))
+#define TestBit(A,k) (A & (1 << (k%NUM_CONTEXT_TYPES)))
+// Extend to larger range using an array: (A[(k/NUM_CONTEXT_TYPES)] |= (1 << (k%NUM_CONTEXT_TYPES)))
+
 //! BLEnd parameters {Epoch, Adv. interval, mode}.
 blend_param_t m_blend_param = { 2000, 77, BLEND_MODE_FULL};
 
-
-//! {node_id, task(idx;duration), ctx_val, cap_vec, need_vec}.
-uint8_t payload[DATA_LENGTH] = {DEVICE_ID,
-			       0x00, 0x00,
-			       0x00, 0x00,
-			       0x00, 0x00};
-//! Array of context types the device currently hosts.
-//! [0] is the self-reporting type
-//! Sensor types should NOT be zero-indexed.
-static uint8_t context_types[NUM_SENSOR_TYPE];
+//! {protocol_id, node_id, cap_vec, demand_vec, shared_type, value1, value2}.
+uint8_t payload[DATA_LENGTH];
 
 blend_data_t m_blend_data;
 				
@@ -110,7 +111,7 @@ static uint32_t epoch_count = 0;
 
 static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
 
-uint8_t found_device[MAX_DEVICE] = {0,0,0};
+uint8_t found_device[MAX_DEVICE];
 
 static const ble_uis_led_t m_led_scan = LED_CONFIG_PURPLE;
 static const ble_uis_led_t m_led_adv = LED_CONFIG_GREEN;
@@ -122,6 +123,35 @@ uint8_t discovered = 0;
 bool discover_mode = true;
 
 static const nrf_drv_twi_t m_twi_sensors = NRF_DRV_TWI_INSTANCE(TWI_SENSOR_INSTANCE);
+
+/*! \brief Structure for a list of nodes.
+ *
+ *  Head will be the node itself.
+ */
+typedef struct {
+  uint8_t node_id; /*!< Id of the discovered node. */
+  uint16_t cap_vec; /*!< Bit vector for sensing capabilities. */
+  uint16_t demand_vec; /*!< Bit vector for context demand. */
+  uint32_t last_sync_ms; /*!< Time of last sync in microseconds */
+  struct node_t* next;
+} node_t;
+
+/*! \brief Structure for context values.
+ */
+typedef struct {
+  uint8_t source_id; /*!< Identifer of the source node. */
+  uint32_t value1; /*!< 32-bit context value. */
+  uint32_t value2; /*!< (optional)32-bit context value. */
+  uint32_t timestamp_ms; /*!< Received time in microseconds. */
+} context_value_t;
+
+/*!< List of nodes in the neighborhood; head is the local node. */
+node_t* node_lst_head;
+/*!< Container for the context values shared and received in the neighborhood(indexed by context type). */
+context_value_t context_pool[NUM_CONTEXT_TYPES];
+/*!< Context type of the current sharing task. TASK_IDLE (i.e. 0) for invalid. */
+uint8_t current_task_type;
+
 
 void app_error_fault_handler(uint32_t id, uint32_t pc, uint32_t info)
 {
@@ -261,18 +291,25 @@ uint32_t rng_rand(int start,int end) {
  *
  * @param[in] sharing_type Context type that the host is sharing (Invalid identified by 0xFF).
  * @param[in] ctx_val Sensor reading of the context being shared.
- * @param[in] duration Duration of the current sharing task(multiple of latency/lambda).
  * @param[out] payload Pointer to the beacon payload array.
  *
  * @return Return status.
  */
-uint32_t update_payload(uint8_t sharing_type, uint8_t duration, uint32_t ctx_val, uint8_t* payload) {
-  payload[0] = DEVICE_ID;
-  payload[1] = sharing_type;
-  payload[2] = duration;
-  uint8_t* vp = (uint8_t*) &ctx_val;
+uint32_t update_payload(uint8_t sharing_type, uint32_t ctx_val1, uint32_t ctx_val2, uint8_t* payload) {
+  payload[0] = PROTOCOL_ID;
+  payload[1] = DEVICE_ID;
+  payload[2] = node_lst_head->cap_vec & 0xFF;
+  payload[3] = (node_lst_head->cap_vec >> 8);
+  payload[4] = node_lst_head->demand_vec & 0xFF;
+  payload[5] = (node_lst_head->demand_vec >> 8);
+  payload[6] = sharing_type;
+  uint8_t* vp = (uint8_t*) &ctx_val1;
   for (int i = 0; i < 4; ++i) {
-    payload[3+i] = vp[i];
+    payload[7+i] = vp[i];
+  }
+  vp = (uint8_t*) &ctx_val2;
+  for (int i = 0; i < 4; ++i) {
+    payload[11+i] = vp[i];
   }
 
   m_blend_data.data_length = DATA_LENGTH;
@@ -284,23 +321,57 @@ uint32_t update_payload(uint8_t sharing_type, uint8_t duration, uint32_t ctx_val
   return 0;
 }
 
-/**@brief Initialize the first sharing task.
+/**@brief Initialize the node's sensing equipment and tasks.
 */
-uint32_t sharing_task_init(void) {
-  //context_types[0] = rng_rand(1, NUM_SENSOR_TYPE);
-  context_types[0] = rng_rand(1, 3);
+uint32_t middleware_init(void) {
+  node_t* host = malloc(sizeof(node_t));
+  host->node_id = DEVICE_ID;
+  // TODO(liuchg): randomized init. for capabilities.
+  host->cap_vec = 0;
+  SetBit(host->cap_vec, 1);
+  SetBit(host->cap_vec, 2);
+  host->demand_vec = 0xFFFF;
+  host->next = NULL;
+
+  node_lst_head = host;
+
+  // Randomly assign a capapble task.
+  current_task_type = rng_rand(1, 3);
+  
   return 0;
+}
+
+/**@brief Update the sensing task.
+ *
+ * Reselect the sensing task based on the current neighborhood. Output to global variable current_task_type.
+ */
+uint32_t update_sensing_task(void) {
+  // TODO(liuchg): Implement selection algorithm here.
+  current_task_type = rng_rand(1, 3);
+  if (current_task_type != TASK_IDLE) {
+    NRF_LOG_DEBUG("Selected  context type: %d.\r\n", current_task_type);
+  }
+}
+
+/**@brief Query the sensor and update the payload, if current task is valid.
+ */
+uint32_t execute_sensing_task(void) {
+  if (current_task_type == TASK_IDLE) {
+    return 0;
+  }
+  // TODO(liuchg): Fetch the sensor reading and update the payload.
 }
 
 /**@brief Context type visualization using the lightwell.
 */
 uint32_t update_light(void) {
-  if (context_types[0] < 0 || context_types[0] > NUM_SENSOR_TYPE) {
-    NRF_LOG_ERROR("Update light error");
+  if (current_task_type >= 3) { // TODO(liuchg): enable real checking below.
+  //  if (current_task_type >= NUM_SENSOR_TYPE) {
+    NRF_LOG_ERROR("Update light error (task context type out of range.)");
     return 1;
   }
-
-  ret_code_t err_code = led_set(&led_colors[context_types[0]],NULL);
+  
+  ret_code_t err_code = led_set(&led_colors[current_task_type],NULL);
   APP_ERROR_CHECK(err_code);
   return 0;
 }
@@ -324,23 +395,25 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     }
   case BLEND_EVT_EPOCH_START: {
     epoch_count += 1;  // CL: Overflow??
-    //ret_code_t err_code = led_set(&m_led_scan,NULL);
     NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN"Epoch %d started.\r\n", epoch_count);
-    //APP_ERROR_CHECK(err_code);
-    
-    update_light();
-    // Populate the beacon payload.
-    if (update_payload(0, 7, 123, payload)) {
-      NRF_LOG_ERROR("Error when updating beacon payload.");
-    }
     break;
   }
   case BLEND_EVT_AFTER_SCAN: {
-    //ret_code_t err_code = led_set(&m_led_adv,NULL);
     NRF_LOG_DEBUG("Scan stopped.\r\n", epoch_count);
     m_humidity_sample();
     m_pressure_sample();
-    //APP_ERROR_CHECK(err_code);
+    
+    // Update sensing task
+    update_sensing_task();
+    // Execute sensing task
+    execute_sensing_task();
+    // Update lightwell
+    update_light();
+
+    // Update beacon payload
+    if (update_payload(current_task_type, 7, 0, payload)) {
+      NRF_LOG_ERROR("Error when updating beacon payload.");
+    }
     break;
   }
   default: {
@@ -376,7 +449,7 @@ int main(void) {
   sensor_init();
   blend_init(m_blend_param, m_blend_handler, m_ble_service_handles);
 
-  sharing_task_init();
+  middleware_init();
 
   run_test();
     
