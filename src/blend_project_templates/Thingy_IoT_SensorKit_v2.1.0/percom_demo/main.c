@@ -40,7 +40,7 @@
  *
  * @brief    Thingy application main file.
  *
- * This file contains the source code for the Blend template application on Thingy. 
+ * Source code for the percom demo application based on the Blend template. 
  */
 #define BLEND_THINGY_SDK
 #include <float.h>
@@ -99,7 +99,9 @@
 // Extend to larger range using an array: (A[(k/NUM_CONTEXT_TYPES)] |= (1 << (k%NUM_CONTEXT_TYPES)))
 
 //! BLEnd parameters {Epoch, Adv. interval, mode}.
-blend_param_t m_blend_param = { 2000, 77, BLEND_MODE_FULL};
+const uint16_t lambda_ms = 2000;
+const uint16_t epoch_length_ms = 2000;
+const uint16_t adv_interval_ms = 77;
 
 //! {protocol_id, node_id, cap_vec, demand_vec, shared_type, value1, value2}.
 uint8_t payload[DATA_LENGTH];
@@ -128,12 +130,12 @@ static const nrf_drv_twi_t m_twi_sensors = NRF_DRV_TWI_INSTANCE(TWI_SENSOR_INSTA
  *
  *  Head will be the node itself.
  */
-typedef struct {
+typedef struct node {
   uint8_t node_id; /*!< Id of the discovered node. */
   uint16_t cap_vec; /*!< Bit vector for sensing capabilities. */
   uint16_t demand_vec; /*!< Bit vector for context demand. */
   uint32_t last_sync_ms; /*!< Time of last sync in microseconds */
-  struct node_t* next;
+  struct node *next;
 } node_t;
 
 /*! \brief Structure for context values.
@@ -144,6 +146,18 @@ typedef struct {
   uint32_t value2; /*!< (optional)32-bit context value. */
   uint32_t timestamp_ms; /*!< Received time in microseconds. */
 } context_value_t;
+
+/*! \brief Structure of the exchange packets.
+ */
+typedef struct {
+  uint8_t node_id; /*!< Identifer of the source node. */
+  uint16_t cap_vec; /*!< Bit vector for sensing capabilities. */
+  uint16_t demand_vec; /*!< Bit vector for sensing capabilities. */
+  uint8_t ctx_type; /*!< Type of the context value contained. */
+  uint32_t value1; /*!< 32-bit context value. */
+  uint32_t value2; /*!< (optional)32-bit context value. */
+  uint32_t timestamp_ms; /*!< 32-bit timestamp in microseconds. */
+} decoded_packet_t;
 
 /*!< List of nodes in the neighborhood; head is the local node. */
 node_t* node_lst_head;
@@ -298,7 +312,7 @@ uint32_t rng_rand(int start,int end) {
 uint32_t update_payload(uint8_t sharing_type, uint32_t ctx_val1, uint32_t ctx_val2, uint8_t* payload) {
   payload[0] = PROTOCOL_ID;
   payload[1] = DEVICE_ID;
-  payload[2] = node_lst_head->cap_vec & 0xFF;
+  payload[2] = node_lst_head->cap_vec & 0xFF; // Little endian
   payload[3] = (node_lst_head->cap_vec >> 8);
   payload[4] = node_lst_head->demand_vec & 0xFF;
   payload[5] = (node_lst_head->demand_vec >> 8);
@@ -351,6 +365,7 @@ uint32_t update_sensing_task(void) {
   if (current_task_type != TASK_IDLE) {
     NRF_LOG_DEBUG("Selected  context type: %d.\r\n", current_task_type);
   }
+  return 0;
 }
 
 /**@brief Query the sensor and update the payload, if current task is valid.
@@ -360,6 +375,7 @@ uint32_t execute_sensing_task(void) {
     return 0;
   }
   // TODO(liuchg): Fetch the sensor reading and update the payload.
+  return 0;
 }
 
 /**@brief Context type visualization using the lightwell.
@@ -376,21 +392,74 @@ uint32_t update_light(void) {
   return 0;
 }
 
+/**@brief Decode the context exchange packet.
+*/
+decoded_packet_t decode(uint8_t * bytes) {
+    uint8_t ngbr_id = bytes[1];
+    uint16_t ngbr_cap = bytes[2] + (bytes[3] << 8);
+    uint16_t ngbr_demand = bytes[4] + (bytes[5] << 8);
+    uint8_t ctx_type = bytes[6];
+    uint16_t val1 = 0;
+    uint16_t val2 = 0;
+    if (ctx_type) {
+      val1 = bytes[7] + (bytes[8] << 8) + (bytes[9] << 16) + (bytes[10] << 24);
+    }
+    //TODO(liuchg): Process the extended field for rich types.
+    uint32_t cur_time = app_timer_cnt_get();
+    decoded_packet_t decoded = {ngbr_id, ngbr_cap, ngbr_demand, ctx_type, val1, val2, cur_time};
+    return decoded;
+}
+
+/**@brief Update the neighbor list from received packet.
+*/
+uint32_t update_neighbor_list(decoded_packet_t* packet) {
+  node_t* prev = node_lst_head;
+  node_t* cur = prev->next;
+  while(cur && cur->node_id != packet->node_id) {
+    cur = cur->next;
+    prev = prev->next;
+  }
+  if (!cur) {
+    node_t* append_ngbr = malloc(sizeof(node_t));
+    append_ngbr->node_id = packet->node_id;
+    append_ngbr->cap_vec = packet->cap_vec;
+    append_ngbr->demand_vec = packet->demand_vec;
+    append_ngbr->last_sync_ms = packet->timestamp_ms;
+    append_ngbr->next = NULL;
+    prev->next = append_ngbr;
+  } else {
+    cur->last_sync_ms = packet->timestamp_ms;
+  }
+  //TODO(liuchg): remove lost nodes.
+  
+  return 0;
+}
+
+/**@brief Update the local context pool from received packet.
+*/
+uint32_t udpate_context_pool(decoded_packet_t* packet) {
+  uint8_t ctype = packet->ctx_type;
+  if (ctype && ctype < NUM_CONTEXT_TYPES) {
+    context_pool[ctype].source_id = packet->node_id;
+    context_pool[ctype].value1 = packet->value1;
+    context_pool[ctype].value2 = packet->value2;
+    context_pool[ctype].timestamp_ms = packet->timestamp_ms;
+  }
+  return 0;
+}
+
 static void m_blend_handler(blend_evt_t * p_blend_evt)
 {
   switch (p_blend_evt->evt_id) {
   case BLEND_EVT_ADV_REPORT: {
     uint8_t * p_data = p_blend_evt->evt_data.data;
-    uint8_t dlen = p_blend_evt->evt_data.data_length;
-    int nbgr_id = p_data[0];
-    uint32_t now_time = app_timer_cnt_get();
-    uint8_t dis_flag = 0;
-    if (dis_flag == 0) {
-      found_device[nbgr_id - 1] = 1;
-      uint32_t time = app_timer_cnt_diff_compute(now_time, start_tick);
-      time = APP_TIMER_MS(time) & 0xffff;
-      NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN"===Found device %d At time: %d===\r\n", nbgr_id, time);
+    uint8_t plen = p_blend_evt->evt_data.data_length;
+    if (p_data[0] != PROTOCOL_ID || plen != DATA_LENGTH) {
+      break;
     }
+    decoded_packet_t decoded_packet = decode(p_data);
+    update_neighbor_list(&decoded_packet);
+    udpate_context_pool(&decoded_packet);
     break;
     }
   case BLEND_EVT_EPOCH_START: {
@@ -433,6 +502,8 @@ int main(void) {
   err_code = NRF_LOG_INIT(NULL);
   APP_ERROR_CHECK(err_code);
   timer_init();
+
+  blend_param_t m_blend_param = {epoch_length_ms, adv_interval_ms, BLEND_MODE_FULL};
 
   NRF_LOG_DEBUG("===== Blend mode %d started! =====\r\n", m_blend_param.blend_mode);
 		
