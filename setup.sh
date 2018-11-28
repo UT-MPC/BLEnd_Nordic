@@ -167,7 +167,7 @@ add_template_project()
     do
 	example_proj_name="${TEMPLATE_PROJECTS[$i]}"
 	temp_dir="${BLEND_TEMP_ORI_LOCATION}/${SDK_NAMES[$SDK_VERSION]}/${example_proj_name}"
-	cp -r "${temp_dir}" "${proj_dir}"
+	cp -r "${temp_dir}" "${proj_dir}" 2>/dev/null
     done
 
     if [ -d "${proj_dir}/${BLEND_TEMP_NAME}" ]; then

@@ -16,10 +16,10 @@ Clone this repository, make ```setup.sh``` executable, and run it.
 
 Example:
 ```bash
-git clone git@github.com:UT-MPC/BLEnd_Nordic.git
-cd BLEnd_Nordic
-chmod u+x setup.sh
-./setup.sh
+$> git clone git@github.com:UT-MPC/BLEnd_Nordic.git
+$> cd BLEnd_Nordic
+$> chmod u+x setup.sh
+$> ./setup.sh
 ```
 
 ## Supported Hardware and SDKs
@@ -31,10 +31,26 @@ instrument the SDK you need.
 | --- | --- | --- |
 | [nRF52840 DK](https://www.nordicsemi.com/eng/Products/nRF52840-DK) | Development kit for nRF52840 from Nordic Semiconductors  | nRF5 v14 |
 | [nRF52840 DK](https://www.nordicsemi.com/eng/Products/nRF52840-DK) | (Same as above)  | nRF5 v15 |
-| [Nordic Thingy52](https://www.nordicsemi.com/eng/Products/Nordic-Thingy-52) | IoT sensor kit from Nordic Semiconductors  | v2.1.0 |
+| [Thingy52](https://www.nordicsemi.com/eng/Products/Nordic-Thingy-52) | IoT sensor kit from Nordic Semiconductors  | v2.1.0 |
+
+## Usage
+Please pay attention to the output of the ```setup``` script. You might need to compile the SDK manually (_urls_ to the guide will be provided). It will also prompt the location of an example project.
+Just go into the directory and try compiling/flashing the application.
+
+Example:
+```bash
+...
+Template project location:  (path_to_directory_on_your_disk)
+
+ All done. You're now ready to compile the SDK and begin your BLEnd development (with the template project).
+ 
+$> cd (path_to_directory_on_your_disk)/armgcc
+$> make
+$> make flash
+```
 
 ## License
-We injected codes in the SDK from Nordic to control the random slack of Bluetooth LE stack.
+
 
 ## Citation
 Please using the following reference in your publications if it helps your research:
