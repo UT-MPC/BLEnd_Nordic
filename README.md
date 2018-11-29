@@ -1,4 +1,5 @@
 # BLEnd scheduler implementation for Nordic platform devices
+[![License](https://img.shields.io/badge/license-BSD-blue.svg)](LICENSE)
 
 Identifying “who is around” is key in a plethora of smart scenarios. This project provides you an implementation of the BLEnd scheduler to enable your IoT devices to be aware of its surroundings using a low duty cycle _continuous_ neighbor discovery protocol [BLEnd:practical continuous neighbor discovery for Bluetooth low energy](https://dl.acm.org/citation.cfm?id=3055086).
 
