@@ -190,7 +190,7 @@ thingy_sdk_change()
 finish()
 {
     echo -e "\n \033[1mAll done. You're now ready to compile the SDK and begin your" \
-	 "BLEnd development (with the template project)\033[0m."
+	 "development (with the template project)\033[0m."
 
     if [ ! "$NRF_TOOL_INSTALLED" == true ]; then
 	echo -e "\n -[nRF5x Command Line Tools] is not installed. Follow ${TOOLCHAIN_URL}" \

@@ -39,20 +39,18 @@ Just go into the directory and try compiling/flashing the application.
 
 Example:
 ```bash
-...
+(script outputs)
 Template project location:  (path_to_directory_on_your_disk)
+ All done. You're now ready to compile the SDK and begin your development (with the template project).
 
- All done. You're now ready to compile the SDK and begin your BLEnd development (with the template project).
- 
 $> cd (path_to_directory_on_your_disk)/armgcc
 $> make
 $> make flash
 ```
 
-## License
+## License and Citation
+The BLEnd scheduler and is released under the BSD 3-Clause license.
 
-
-## Citation
 Please using the following reference in your publications if it helps your research:
 
 ```
