@@ -305,7 +305,7 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context) {
 static void blend_ble_stack_init(void) {
   m_ble_init_t ble_params;
   ret_code_t err_code;
-  /**@brief Initialize BLE handling module. */
+  // Initialize BLE handling module.
   ble_params.evt_handler = ble_evt_handler;
   ble_params.p_service_handles = _blend_service_handles;
   ble_params.service_num = THINGY_SERVICES_MAX;

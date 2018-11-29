@@ -70,13 +70,13 @@
 #include "nordic_common.h"
 #include "nrf.h"
 #include "nrf_delay.h"
+#include "nrf_drv_rng.h"
+#include "nrf_log.h"
+#include "nrf_log_ctrl.h"
 #include "pca20020.h"
 #include "softdevice_handler.h"
 #include "support_func.h"
 #include "twi_manager.h"
-
-#include "nrf_log.h"
-#include "nrf_log_ctrl.h"
 
 //! Value used as error code on stack dump, can be used to identify stack location on stack unwind.
 #define DEAD_BEEF 0xDEADBEEF
@@ -113,10 +113,7 @@ static uint32_t epoch_count = 0;
 
 static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
 
-uint8_t found_device[MAX_DEVICE];
-
-static const ble_uis_led_t m_led_scan = LED_CONFIG_PURPLE;
-static const ble_uis_led_t m_led_adv = LED_CONFIG_GREEN;
+// uint8_t found_device[MAX_DEVICE];
 
 static const ble_uis_led_t led_colors[3] = {LED_CONFIG_WHITE, LED_CONFIG_RED, LED_CONFIG_GREEN};
 
@@ -274,13 +271,12 @@ static void timer_init(void)
     APP_ERROR_CHECK(err_code);
 }
 
-static void run_test(){
-  ret_code_t err_code;
-  memset(&found_device, 0, sizeof(found_device));
-  start_tick = app_timer_cnt_get();
-  blend_sched_start();
- 
-}
+/* static void run_test(){ */
+/*   ret_code_t err_code; */
+/*   memset(&found_device, 0, sizeof(found_device)); */
+/*   start_tick = app_timer_cnt_get(); */
+/*   blend_sched_start();  */
+/* } */
 
 //! Start inclusive, end exclusive.
 uint32_t rng_rand(int start,int end) {
@@ -415,7 +411,17 @@ decoded_packet_t decode(uint8_t * bytes) {
 uint32_t update_neighbor_list(decoded_packet_t* packet) {
   node_t* prev = node_lst_head;
   node_t* cur = prev->next;
+  uint32_t cur_time_ms = app_timer_cnt_get();
+  
   while(cur && cur->node_id != packet->node_id) {
+    // Check and remove lost neighbors
+    if (cur->last_sync_ms < (cur_time_ms - 2 * lambda_ms)) {
+      node_t* next = cur->next;
+      free(cur);
+      prev->next = next;
+      cur = next;
+      continue;
+    }
     cur = cur->next;
     prev = prev->next;
   }
@@ -430,7 +436,6 @@ uint32_t update_neighbor_list(decoded_packet_t* packet) {
   } else {
     cur->last_sync_ms = packet->timestamp_ms;
   }
-  //TODO(liuchg): remove lost nodes.
   
   return 0;
 }
@@ -522,7 +527,7 @@ int main(void) {
 
   middleware_init();
 
-  run_test();
+  blend_sched_start();
     
   for (;;)
     {

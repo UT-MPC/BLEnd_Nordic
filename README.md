@@ -24,7 +24,7 @@ $> ./setup.sh
 ```
 
 ## Supported Hardware and SDKs
-During installation you will be asking to select one of the supported
+During installation you will be asked to select one of the supported
 version before and the script will automatically download and
 instrument the SDK you need.
 
