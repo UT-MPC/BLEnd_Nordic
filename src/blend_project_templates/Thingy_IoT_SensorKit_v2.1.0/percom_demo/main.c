@@ -70,13 +70,13 @@
 #include "nordic_common.h"
 #include "nrf.h"
 #include "nrf_delay.h"
-#include "nrf_drv_rng.h"
-#include "nrf_log.h"
-#include "nrf_log_ctrl.h"
 #include "pca20020.h"
 #include "softdevice_handler.h"
 #include "support_func.h"
 #include "twi_manager.h"
+#include "context.h"
+#include "nrf_log.h"
+#include "nrf_log_ctrl.h"
 
 //! Value used as error code on stack dump, can be used to identify stack location on stack unwind.
 #define DEAD_BEEF 0xDEADBEEF
@@ -90,7 +90,6 @@
 #define MAX_DEVICE 10
 #define DATA_LENGTH 15
 #define NUM_ENABLED_SENSOR 8
-#define NUM_CONTEXT_TYPES 16
 #define TASK_IDLE 0
 
 #define SetBit(A,k) (A |= (1 << (k%NUM_CONTEXT_TYPES)))
@@ -113,9 +112,12 @@ static uint32_t epoch_count = 0;
 
 static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
 
-// uint8_t found_device[MAX_DEVICE];
+uint8_t found_device[MAX_DEVICE];
 
-static const ble_uis_led_t led_colors[3] = {LED_CONFIG_WHITE, LED_CONFIG_RED, LED_CONFIG_GREEN};
+static const ble_uis_led_t m_led_scan = LED_CONFIG_PURPLE;
+static const ble_uis_led_t m_led_adv = LED_CONFIG_GREEN;
+
+static const ble_uis_led_t led_colors[5] = {LED_CONFIG_RED, LED_CONFIG_PURPLE, LED_CONFIG_BLUE, LED_CONFIG_GREEN, LED_CONFIG_WHITE};
 
 uint8_t on_scan_flag  = 0;
 uint8_t discovered = 0;
@@ -135,31 +137,12 @@ typedef struct node {
   struct node *next;
 } node_t;
 
-/*! \brief Structure for context values.
- */
-typedef struct {
-  uint8_t source_id; /*!< Identifer of the source node. */
-  uint32_t value1; /*!< 32-bit context value. */
-  uint32_t value2; /*!< (optional)32-bit context value. */
-  uint32_t timestamp_ms; /*!< Received time in microseconds. */
-} context_value_t;
 
-/*! \brief Structure of the exchange packets.
- */
-typedef struct {
-  uint8_t node_id; /*!< Identifer of the source node. */
-  uint16_t cap_vec; /*!< Bit vector for sensing capabilities. */
-  uint16_t demand_vec; /*!< Bit vector for sensing capabilities. */
-  uint8_t ctx_type; /*!< Type of the context value contained. */
-  uint32_t value1; /*!< 32-bit context value. */
-  uint32_t value2; /*!< (optional)32-bit context value. */
-  uint32_t timestamp_ms; /*!< 32-bit timestamp in microseconds. */
-} decoded_packet_t;
 
 /*!< List of nodes in the neighborhood; head is the local node. */
 node_t* node_lst_head;
 /*!< Container for the context values shared and received in the neighborhood(indexed by context type). */
-context_value_t context_pool[NUM_CONTEXT_TYPES];
+context_t context_pool[NUM_CONTEXT_TYPES];
 /*!< Context type of the current sharing task. TASK_IDLE (i.e. 0) for invalid. */
 uint8_t current_task_type;
 
@@ -271,12 +254,13 @@ static void timer_init(void)
     APP_ERROR_CHECK(err_code);
 }
 
-/* static void run_test(){ */
-/*   ret_code_t err_code; */
-/*   memset(&found_device, 0, sizeof(found_device)); */
-/*   start_tick = app_timer_cnt_get(); */
-/*   blend_sched_start();  */
-/* } */
+static void run_test(){
+  ret_code_t err_code;
+  memset(&found_device, 0, sizeof(found_device));
+  start_tick = app_timer_cnt_get();
+  blend_sched_start();
+ 
+}
 
 //! Start inclusive, end exclusive.
 uint32_t rng_rand(int start,int end) {
@@ -383,7 +367,8 @@ uint32_t update_light(void) {
     return 1;
   }
   
-  ret_code_t err_code = led_set(&led_colors[current_task_type],NULL);
+  //ret_code_t err_code = led_set(&led_colors[current_task_type],NULL);
+  ret_code_t err_code = led_set(&led_colors[2],NULL);
   APP_ERROR_CHECK(err_code);
   return 0;
 }
@@ -402,7 +387,8 @@ decoded_packet_t decode(uint8_t * bytes) {
     }
     //TODO(liuchg): Process the extended field for rich types.
     uint32_t cur_time = app_timer_cnt_get();
-    decoded_packet_t decoded = {ngbr_id, ngbr_cap, ngbr_demand, ctx_type, val1, val2, cur_time};
+    context_t cur_context = {ngbr_id, ctx_type, val1, val2, cur_time};
+    decoded_packet_t decoded = {ngbr_id, ngbr_cap, ngbr_demand, cur_context, cur_time};
     return decoded;
 }
 
@@ -411,17 +397,7 @@ decoded_packet_t decode(uint8_t * bytes) {
 uint32_t update_neighbor_list(decoded_packet_t* packet) {
   node_t* prev = node_lst_head;
   node_t* cur = prev->next;
-  uint32_t cur_time_ms = app_timer_cnt_get();
-  
   while(cur && cur->node_id != packet->node_id) {
-    // Check and remove lost neighbors
-    if (cur->last_sync_ms < (cur_time_ms - 2 * lambda_ms)) {
-      node_t* next = cur->next;
-      free(cur);
-      prev->next = next;
-      cur = next;
-      continue;
-    }
     cur = cur->next;
     prev = prev->next;
   }
@@ -436,6 +412,7 @@ uint32_t update_neighbor_list(decoded_packet_t* packet) {
   } else {
     cur->last_sync_ms = packet->timestamp_ms;
   }
+  //TODO(liuchg): remove lost nodes.
   
   return 0;
 }
@@ -443,12 +420,15 @@ uint32_t update_neighbor_list(decoded_packet_t* packet) {
 /**@brief Update the local context pool from received packet.
 */
 uint32_t udpate_context_pool(decoded_packet_t* packet) {
-  uint8_t ctype = packet->ctx_type;
+  context_t cur_context = packet->context;
+
+  uint8_t ctype = cur_context.ctx_type;
   if (ctype && ctype < NUM_CONTEXT_TYPES) {
-    context_pool[ctype].source_id = packet->node_id;
-    context_pool[ctype].value1 = packet->value1;
-    context_pool[ctype].value2 = packet->value2;
-    context_pool[ctype].timestamp_ms = packet->timestamp_ms;
+    context_pool[ctype].ctx_type = ctype;
+    context_pool[ctype].source_id = cur_context.source_id;
+    context_pool[ctype].value1 = cur_context.value1;
+    context_pool[ctype].value2 = cur_context.value2;
+    context_pool[ctype].timestamp_ms = cur_context.timestamp_ms;
   }
   return 0;
 }
@@ -476,7 +456,7 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     NRF_LOG_DEBUG("Scan stopped.\r\n", epoch_count);
     m_humidity_sample();
     m_pressure_sample();
-    
+    context_read(0);
     // Update sensing task
     update_sensing_task();
     // Execute sensing task
@@ -527,7 +507,7 @@ int main(void) {
 
   middleware_init();
 
-  blend_sched_start();
+  run_test();
     
   for (;;)
     {

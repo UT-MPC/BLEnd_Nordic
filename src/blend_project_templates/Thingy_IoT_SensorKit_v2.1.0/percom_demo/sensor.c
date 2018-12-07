@@ -17,16 +17,23 @@
 #include "blend.h"
 
 
+temperature_t _temp_cache;
+humidity_t _humid_cache;
+pressure_t _pressure_cache;
 
 
-static void temperature_conv_data(float in_temp, temperature_t * p_out)
+
+/**@brief Function for converting the temperature sample.
+ */
+static void temperature_conv_data(float in_temp, temperature_t * p_out_temp)
 {
   float f_decimal;
 
-  p_out->integer = (int8_t)in_temp;
-  f_decimal = in_temp - p_out->integer;
-  p_out->decimal = (uint8_t)(f_decimal * 100.0f);
-  NRF_LOG_DEBUG("temperature_conv_data: Temperature: ,%d.%d,C\r\n", p_out->integer, p_out->decimal);
+  p_out_temp->integer = (int8_t)in_temp;
+  f_decimal = in_temp - p_out_temp->integer;
+  p_out_temp->decimal = (uint8_t)(f_decimal * 100.0f);
+  p_out_temp->timestamp = app_timer_cnt_get();
+  NRF_LOG_DEBUG("temperature_conv_data: Temperature: ,%d.%d,C\r\n", p_out_temp->integer, p_out_temp->decimal);
 }
 
 /**@brief Function for converting the humidity sample.
@@ -34,6 +41,7 @@ static void temperature_conv_data(float in_temp, temperature_t * p_out)
 static void humidity_conv_data(uint8_t humid, humidity_t * p_out_humid)
 {
   p_out_humid->humid = (uint8_t)humid;
+  p_out_humid->timestamp = app_timer_cnt_get();
   NRF_LOG_DEBUG("humidity_conv_data: Relative Humidty: ,%d,%%\r\n", humid);
 }
 
@@ -47,17 +55,24 @@ static void pressure_conv_data(float in_press, pressure_t * p_out_press)
   p_out_press->integer = (int32_t)in_press;
   f_decimal = in_press - p_out_press->integer;
   p_out_press->decimal = (uint8_t)(f_decimal * 100.0f);
+  p_out_press->timestamp = app_timer_cnt_get();
   NRF_LOG_DEBUG("pressure_conv_data: Pressure/Altitude: %d.%d Pa/m\r\n", p_out_press->integer, p_out_press->decimal);
 }
 
-void temp_get(){
-	float temperature = drv_humidity_temp_get();
-  uint16_t humidity = drv_humidity_get();
-  temperature_t new_temp;
-  humidity_t new_humid;
-  temperature_conv_data(temperature,&new_temp);
-  humidity_conv_data(humidity, &new_humid);
+void m_temperature_read(void** data_ptr){
+  NRF_LOG_DEBUG("m_temperature_read: Temperature: ,%d.%d,C\r\n", _temp_cache.integer, _temp_cache.decimal);
+  *data_ptr = &_temp_cache;
+  return;
 }
+void m_humidity_read(void** data_ptr){
+  *data_ptr = &_humid_cache;
+  return;
+}
+void m_pressure_read(void** data_ptr){
+  *data_ptr = &_pressure_cache;
+  return;
+}
+
 void drv_humidity_evt_handler(drv_humidity_evt_t event)
 {
   uint32_t err_code;
@@ -67,8 +82,8 @@ void drv_humidity_evt_handler(drv_humidity_evt_t event)
     uint16_t humidity = drv_humidity_get();
     temperature_t new_temp;
     humidity_t new_humid;
-    temperature_conv_data(temperature,&new_temp);
-    humidity_conv_data(humidity, &new_humid);
+    temperature_conv_data(temperature,&_temp_cache);
+    humidity_conv_data(humidity, &_humid_cache);
   }
   else
   {
@@ -145,6 +160,8 @@ uint32_t pressure_sensor_init(const nrf_drv_twi_t * p_twi_instance)
 void m_humidity_sample(){
   ret_code_t err_code;
   err_code = drv_humidity_enable();
+  APP_ERROR_CHECK(err_code);
+
   err_code = drv_humidity_sample();
   APP_ERROR_CHECK(err_code);
 }
