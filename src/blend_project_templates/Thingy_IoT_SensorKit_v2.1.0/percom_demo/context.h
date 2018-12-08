@@ -29,19 +29,17 @@ typedef struct {
 } decoded_packet_t;
 
 typedef void (*sensor2ctx_func_t) (void* , context_t*);
-
-// void temp2ctx(void* temp_in, context_t* context_out);
-// void humid2ctx(void* temp_in, context_t* context_out);
-// void pressure2ctx(void* temp_in, context_t* context_out);
-
-// void sensor2ctx(void* sensor_in, context_t* context_out);
-// void ctx2sensor(context_t* context_in, void* sensor_out);
+typedef void (*ctx2sensor_func_t) (context_t* , void**);
 
 void context_sample(uint8_t ctx_tye);
 context_t context_read(uint8_t ctx_tye);
 
+/*
+  @brief Convert a context to string. The char* passed in must 
+  have enough space for the string
+*/
+void context2str(context_t context_in, char* str_out);
 extern char* ctx_name[];
-// sensor2ctx_func_t sensor2ctx_func[];
 
 
 #endif

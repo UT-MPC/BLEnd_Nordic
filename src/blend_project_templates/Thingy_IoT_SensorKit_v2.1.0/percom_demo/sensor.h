@@ -32,6 +32,7 @@ typedef struct
 
 typedef void (*sensor_read_func_t)(void **);
 typedef void (*sensor_sample_func_t)();
+typedef void (*sensor2str_func_t)(void*, char*);
 
 // Initialize humidity sensor
 uint32_t humidity_sensor_init(nrf_drv_twi_t const* p_twi_instance);
@@ -43,6 +44,10 @@ void m_pressure_sample();
 void m_temperature_read(void**);
 void m_humidity_read(void**);
 void m_pressure_read(void** );
+
+void m_temperature2str(void* , char*);
+void m_humidity2str(void* , char*);
+void m_pressure2str(void* , char*);
 
 uint32_t m_humidity_disable();
 uint32_t m_pressure_disable();

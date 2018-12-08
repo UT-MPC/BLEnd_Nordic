@@ -21,7 +21,20 @@ temperature_t _temp_cache;
 humidity_t _humid_cache;
 pressure_t _pressure_cache;
 
+void m_temperature2str(void* temp_p, char* str){
+  temperature_t temp_in = *((temperature_t*)temp_p);
+  sprintf(str, "Temperature: %d.%d\'C", temp_in.integer, temp_in.decimal);
+}
 
+void m_humidity2str(void* humid_p, char* str){
+  humidity_t humid_in = *((humidity_t*)humid_p);
+  sprintf(str, "Relative Humidity: %d%%", humid_in.humid);
+}
+
+void m_pressure2str(void* pressure_p, char* str){
+  pressure_t pressure_in = *((pressure_t*)pressure_p);
+  sprintf(str, "Pressure: %d.%d hPa\r\n", pressure_in.integer, pressure_in.decimal);
+}
 
 /**@brief Function for converting the temperature sample.
  */
@@ -42,7 +55,7 @@ static void humidity_conv_data(uint8_t humid, humidity_t * p_out_humid)
 {
   p_out_humid->humid = (uint8_t)humid;
   p_out_humid->timestamp = app_timer_cnt_get();
-  NRF_LOG_DEBUG("humidity_conv_data: Relative Humidty: ,%d,%%\r\n", humid);
+  NRF_LOG_DEBUG("humidity_conv_data: Relative Humidity: ,%d,%%\r\n", humid);
 }
 
 
@@ -56,11 +69,10 @@ static void pressure_conv_data(float in_press, pressure_t * p_out_press)
   f_decimal = in_press - p_out_press->integer;
   p_out_press->decimal = (uint8_t)(f_decimal * 100.0f);
   p_out_press->timestamp = app_timer_cnt_get();
-  NRF_LOG_DEBUG("pressure_conv_data: Pressure/Altitude: %d.%d Pa/m\r\n", p_out_press->integer, p_out_press->decimal);
+  NRF_LOG_DEBUG("pressure_conv_data: Pressure: %d.%d hPa\r\n", p_out_press->integer, p_out_press->decimal);
 }
 
 void m_temperature_read(void** data_ptr){
-  NRF_LOG_DEBUG("m_temperature_read: Temperature: ,%d.%d,C\r\n", _temp_cache.integer, _temp_cache.decimal);
   *data_ptr = &_temp_cache;
   return;
 }
@@ -98,8 +110,7 @@ static void drv_pressure_evt_handler(drv_pressure_evt_t const * p_event)
     {
       if (p_event->mode == DRV_PRESSURE_MODE_BAROMETER)
       {
-        pressure_t pressure;
-        pressure_conv_data(drv_pressure_get(),&pressure);
+        pressure_conv_data(drv_pressure_get(),&_pressure_cache);
       }
     }
     break;

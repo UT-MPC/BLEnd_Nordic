@@ -454,9 +454,22 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
   }
   case BLEND_EVT_AFTER_SCAN: {
     NRF_LOG_DEBUG("Scan stopped.\r\n", epoch_count);
-    m_humidity_sample();
-    m_pressure_sample();
-    context_read(0);
+
+    // JH: sample code for sample, read, and to_string the context type.
+    context_sample(0);
+    context_sample(1);
+    context_sample(2);
+    context_t temp = context_read(0);
+    context_t humid = context_read(1);
+    context_t press = context_read(2);
+    char* x = malloc(sizeof(char) * 30);
+    context2str(temp, x);
+    NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x);
+    context2str(humid, x);
+    NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x);
+    context2str(press, x);
+    NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x);
+    free(x);
     // Update sensing task
     update_sensing_task();
     // Execute sensing task
