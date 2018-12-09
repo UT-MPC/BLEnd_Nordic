@@ -167,7 +167,7 @@ add_template_project()
     do
 	example_proj_name="${TEMPLATE_PROJECTS[$i]}"
 	temp_dir="${BLEND_TEMP_ORI_LOCATION}/${SDK_NAMES[$SDK_VERSION]}/${example_proj_name}"
-	cp -r "${temp_dir}" "${proj_dir}"
+	cp -r "${temp_dir}" "${proj_dir}" 2>/dev/null
     done
 
     if [ -d "${proj_dir}/${BLEND_TEMP_NAME}" ]; then
@@ -190,7 +190,7 @@ thingy_sdk_change()
 finish()
 {
     echo -e "\n \033[1mAll done. You're now ready to compile the SDK and begin your" \
-	 "BLEnd development (with the template project)\033[0m."
+	 "development (with the template project)\033[0m."
 
     if [ ! "$NRF_TOOL_INSTALLED" == true ]; then
 	echo -e "\n -[nRF5x Command Line Tools] is not installed. Follow ${TOOLCHAIN_URL}" \

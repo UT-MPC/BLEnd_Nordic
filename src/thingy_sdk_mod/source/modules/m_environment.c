@@ -218,12 +218,7 @@ static void drv_gas_data_handler(drv_gas_sensor_data_t const * p_data)
     {
         ble_tes_gas_t data;
         data.eco2_ppm = p_data->ec02_ppm;
-        data.tvoc_ppb = p_data->tvoc_ppb;
-
-        NRF_LOG_INFO("gas_data_handler eCO2:, %d, - TVOC:, %d,\r\n", p_data->ec02_ppm,
-                                                                      p_data->tvoc_ppb);
-		
-	NRF_LOG_INFO("gas delay: %d\r\n", APP_TIMER_MS(app_timer_cnt_diff_compute(app_timer_cnt_get(),_env_gas_start)));
+        data.tvoc_ppb = p_data->tvoc_ppb;		
         (void)ble_tes_gas_set(&m_tes, &data);
 
         #if defined (ENV_DEBUG)
@@ -249,11 +244,6 @@ static void drv_color_data_handler(drv_color_data_t const * p_data)
     if (p_data != NULL)
     {
         ble_tes_color_t data;
-        NRF_LOG_INFO("color delay: %d\r\n", APP_TIMER_MS(app_timer_cnt_diff_compute(app_timer_cnt_get(),_env_color_start)));
-        NRF_LOG_INFO("color_data_handler r: %d - g: %d - b: %d - c: %d\r\n", p_data->red,
-                                                                              p_data->green,
-                                                                              p_data->blue,
-                                                                              p_data->clear);
         data.red   = p_data->red;
         data.green = p_data->green;
         data.blue  = p_data->blue;
@@ -608,8 +598,6 @@ static uint32_t gas_store_baseline_flash(uint16_t baseline)
 
 static uint32_t gas_start(void)
 {
-    NRF_LOG_INFO("Gas start: mode: 0x%x \r\n", m_p_config->gas_interval_mode);
-
     uint32_t err_code;
     drv_gas_sensor_mode_t mode;
 
@@ -944,7 +932,6 @@ static uint32_t environment_service_init(bool major_minor_fw_ver_changed)
     tes_init.p_init_config = m_p_config;
     tes_init.evt_handler = ble_tes_evt_handler;
 
-    NRF_LOG_INFO("Init: ble_tes_init \r\n");
     err_code = ble_tes_init(&m_tes, &tes_init);
     RETURN_IF_ERROR(err_code);
 
@@ -1110,8 +1097,6 @@ uint32_t m_environment_init(m_ble_service_handle_t * p_handle, m_environment_ini
 
     NULL_PARAM_CHECK(p_handle);
     NULL_PARAM_CHECK(p_params);
-
-    NRF_LOG_INFO("Init: \r\n");
 
     p_handle->ble_evt_cb = environment_on_ble_evt;
     p_handle->init_cb    = environment_service_init;

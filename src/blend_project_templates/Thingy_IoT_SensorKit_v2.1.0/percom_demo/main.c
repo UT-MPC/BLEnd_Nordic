@@ -40,12 +40,14 @@
  *
  * @brief    Thingy application main file.
  *
- * This file contains the source code for the Blend template application on Thingy. 
+ * Source code for the percom demo application based on the Blend template. 
  */
 #define BLEND_THINGY_SDK
 #include <float.h>
 #include <stdint.h>
 #include <string.h>
+#include "light_control.h"
+#include "sensor.h"
 
 #include "app_button.h"
 #include "app_error.h"
@@ -64,9 +66,6 @@
 #include "drv_ext_light.h"
 #include "m_batt_meas.h"
 #include "m_ble.h"
-#include "m_environment.h"
-#include "m_motion.h"
-#include "m_sound.h"
 #include "m_ui.h"
 #include "nordic_common.h"
 #include "nrf.h"
@@ -75,8 +74,7 @@
 #include "softdevice_handler.h"
 #include "support_func.h"
 #include "twi_manager.h"
-
-#define  NRF_LOG_MODULE_NAME "main          "
+#include "context.h"
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
 
@@ -87,78 +85,67 @@
 //! Maximum number of events in the scheduler queue.
 #define SCHED_QUEUE_SIZE 60
 
-//! BLEnd parameters {Epoch, Adv. interval, mode}.
-blend_param_t m_blend_param = { 2000, 77, BLEND_MODE_FULL};
-#define APP_DEVICE_NUM 0x01
+#define PROTOCOL_ID 0x8B
+#define DEVICE_ID 0x01
 #define MAX_DEVICE 10
-#define m_data_len 7
-#define discover_index 1
+#define DATA_LENGTH 15
+#define NUM_ENABLED_SENSOR 8
+#define TASK_IDLE 0
 
-#define LED_CONFIG_GREEN			\
-  {						\
-    .mode = BLE_UIS_LED_MODE_CONST,		\
-      .data =					\
-      {						\
-        .mode_const =				\
-        {					\
-	  .r  = 11,				\
-	  .g  = 102,				\
-	  .b  = 35				\
-        }					\
-      }						\
-  }
+#define SetBit(A,k) (A |= (1 << (k%NUM_CONTEXT_TYPES)))
+#define ClearBit(A,k) (A &= ~(1 << (k%NUM_CONTEXT_TYPES)))
+#define TestBit(A,k) (A & (1 << (k%NUM_CONTEXT_TYPES)))
+// Extend to larger range using an array: (A[(k/NUM_CONTEXT_TYPES)] |= (1 << (k%NUM_CONTEXT_TYPES)))
 
-#define LED_CONFIG_PURPLE			\
-  {						\
-    .mode = BLE_UIS_LED_MODE_CONST,		\
-      .data =					\
-      {						\
-        .mode_const =				\
-        {					\
-	  .r  = 75,				\
-	  .g  = 0,				\
-	  .b  = 130				\
-        }					\
-      }						\
-  }
+//! BLEnd parameters {Epoch, Adv. interval, mode}.
+const uint16_t lambda_ms = 2000;
+const uint16_t epoch_length_ms = 2000;
+const uint16_t adv_interval_ms = 77;
 
-#define LED_CONFIG_RED				\
-  {						\
-    .mode = BLE_UIS_LED_MODE_CONST,		\
-      .data =					\
-      {						\
-        .mode_const =				\
-        {					\
-	  .r  = 177,				\
-	  .g  = 0,				\
-	  .b  = 0				\
-        }					\
-      }						\
-  }
+//! {protocol_id, node_id, cap_vec, demand_vec, shared_type, value1, value2}.
+uint8_t payload[DATA_LENGTH];
 
-//! Discovered device count.
-uint8_t payload[m_data_len] = {APP_DEVICE_NUM,
-			       0x00, 0x00,
-			       0x00, 0x00,
-			       0x00, 0x00};
 blend_data_t m_blend_data;
 				
 uint32_t start_tick = 0;
 static uint32_t epoch_count = 0;
-// uint8_t found_device[MAX_DEVICE];
 
 static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
 
-uint8_t found_device[MAX_DEVICE] = {0,0,0};
+uint8_t found_device[MAX_DEVICE];
 
 static const ble_uis_led_t m_led_scan = LED_CONFIG_PURPLE;
 static const ble_uis_led_t m_led_adv = LED_CONFIG_GREEN;
+
+static const ble_uis_led_t led_colors[5] = {LED_CONFIG_RED, LED_CONFIG_PURPLE, LED_CONFIG_BLUE, LED_CONFIG_GREEN, LED_CONFIG_WHITE};
 
 uint8_t on_scan_flag  = 0;
 uint8_t discovered = 0;
 bool discover_mode = true;
 
 static const nrf_drv_twi_t m_twi_sensors = NRF_DRV_TWI_INSTANCE(TWI_SENSOR_INSTANCE);
+
+/*! \brief Structure for a list of nodes.
+ *
+ *  Head will be the node itself.
+ */
+typedef struct node {
+  uint8_t node_id; /*!< Id of the discovered node. */
+  uint16_t cap_vec; /*!< Bit vector for sensing capabilities. */
+  uint16_t demand_vec; /*!< Bit vector for context demand. */
+  uint32_t last_sync_ms; /*!< Time of last sync in microseconds */
+  struct node *next;
+} node_t;
+
+
+
+/*!< List of nodes in the neighborhood; head is the local node. */
+node_t* node_lst_head;
+/*!< Container for the context values shared and received in the neighborhood(indexed by context type). */
+context_t context_pool[NUM_CONTEXT_TYPES];
+/*!< Context type of the current sharing task. TASK_IDLE (i.e. 0) for invalid. */
+uint8_t current_task_type;
+
 
 void app_error_fault_handler(uint32_t id, uint32_t pc, uint32_t info)
 {
@@ -194,54 +181,6 @@ void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
     app_error_handler(DEAD_BEEF, line_num, p_file_name);
 }
 
-/**@brief Function for putting Thingy into sleep mode.
- *
- * @note This function will not return.
- */
-/* static void sleep_mode_enter(void) */
-/* { */
-/*     uint32_t err_code; */
-
-/*     NRF_LOG_INFO("Entering sleep mode \r\n"); */
-/*     err_code = m_motion_sleep_prepare(true); */
-/*     APP_ERROR_CHECK(err_code); */
-
-/*     err_code = support_func_configure_io_shutdown(); */
-/*     APP_ERROR_CHECK(err_code); */
-    
-/*     // Enable wake on button press. */
-/*     nrf_gpio_cfg_sense_input(BUTTON, NRF_GPIO_PIN_PULLUP, NRF_GPIO_PIN_SENSE_LOW); */
-/*     // Enable wake on low power accelerometer. */
-/*     nrf_gpio_cfg_sense_input(LIS_INT1, NRF_GPIO_PIN_NOPULL, NRF_GPIO_PIN_SENSE_HIGH); */
-   
-/*     NRF_LOG_FLUSH(); */
-/*     nrf_delay_ms(5); */
-/*     // Go to system-off (sd_power_system_off() will not return; wakeup will cause a reset). When debugging, this function may return and code execution will continue. */
-/*     err_code = sd_power_system_off(); */
-/*     NRF_LOG_WARNING("sd_power_system_off() returned. -Probably due to debugger being used. Instructions will still run. \r\n"); */
-/*     NRF_LOG_FLUSH(); */
-    
-/*     #ifdef DEBUG */
-/*         if(!support_func_sys_halt_debug_enabled()) */
-/*         { */
-/*             APP_ERROR_CHECK(err_code); // If not in debug mode, return the error and the system will reboot. */
-/*         } */
-/*         else */
-/*         { */
-/*             NRF_LOG_WARNING("Exec stopped, busy wait \r\n"); */
-/*             NRF_LOG_FLUSH(); */
-            
-/*             while(true) // Only reachable when entering emulated system off. */
-/*             { */
-/*                 // Infinte loop to ensure that code stops in debug mode. */
-/*             } */
-/*         } */
-/*     #else */
-/*         APP_ERROR_CHECK(err_code); */
-/*     #endif */
-/* } */
-
-
 /**@brief Function for placing the application in low power state while waiting for events.
  */
 #define FPU_EXCEPTION_MASK 0x0000009F
@@ -255,58 +194,10 @@ static void power_manage(void)
     APP_ERROR_CHECK(err_code);
 }
 
-
-/**@brief Battery module data handler.
- */
-/* static void m_batt_meas_handler(m_batt_meas_event_t const * p_batt_meas_event) */
-/* { */
-/* 	NRF_LOG_INFO("MichHello:Voltage: %d V, Charge: %d %%, Event type: %d \r\n", */
-/*                 p_batt_meas_event->voltage_mv, p_batt_meas_event->level_percent, p_batt_meas_event->type); */
-   
-/*     if (p_batt_meas_event != NULL) */
-/*     { */
-/*         if( p_batt_meas_event->type == M_BATT_MEAS_EVENT_LOW) */
-/*         { */
-/*             uint32_t err_code; */
-
-/*             err_code = support_func_configure_io_shutdown(); */
-/*             APP_ERROR_CHECK(err_code); */
-            
-/*             // Enable wake on USB detect only. */
-/*             nrf_gpio_cfg_sense_input(USB_DETECT, NRF_GPIO_PIN_NOPULL, NRF_GPIO_PIN_SENSE_HIGH); */
-
-/*             NRF_LOG_WARNING("Battery voltage low, shutting down Thingy. Connect USB to charge \r\n"); */
-/*             NRF_LOG_FINAL_FLUSH(); */
-/*             // Go to system-off mode (This function will not return; wakeup will cause a reset). */
-/*             err_code = sd_power_system_off(); */
-
-/*             #ifdef DEBUG */
-/*                 if(!support_func_sys_halt_debug_enabled()) */
-/*                 { */
-/*                     APP_ERROR_CHECK(err_code); // If not in debug mode, return the error and the system will reboot. */
-/*                 } */
-/*                 else */
-/*                 { */
-/*                     NRF_LOG_WARNING("Exec stopped, busy wait \r\n"); */
-/*                     NRF_LOG_FLUSH(); */
-/*                     while(true) // Only reachable when entering emulated system off. */
-/*                     { */
-/*                         // Infinte loop to ensure that code stops in debug mode. */
-/*                     } */
-/*                 } */
-/*             #else */
-/*                 APP_ERROR_CHECK(err_code); */
-/*             #endif */
-/*         } */
-/*     } */
-/* } */
-
 static void thingy_init(void)
 {
     uint32_t                 err_code;
     m_ui_init_t              ui_params;
-    m_environment_init_t     env_params;
-    m_motion_init_t          motion_params;
     m_ble_init_t             ble_params;
     batt_meas_init_t         batt_meas_init = BATT_MEAS_PARAM_CFG;
 
@@ -319,9 +210,6 @@ static void thingy_init(void)
     err_code = m_ui_init(&m_ble_service_handles[THINGY_SERVICE_UI],
                          &ui_params);
     APP_ERROR_CHECK(err_code);
-
-    /* err_code = led_set(&m_led_idle,NULL); */
-    /* APP_ERROR_CHECK(err_code); */
 }
 
 static void board_init(void)
@@ -359,98 +247,288 @@ static void board_init(void)
 
     nrf_delay_ms(100);
 }
+
 static void timer_init(void)
 {
     ret_code_t err_code = app_timer_init();
     APP_ERROR_CHECK(err_code);
 }
 
-/* static void restart_timer_handler(void* p_context){ */
-/*   for (int i = 0; i < MAX_DEVICE; i ++) */
-/*     { */
-/*       if (i == (APP_DEVICE_NUM - 1)){ */
-/* 	continue; */
-/*       } */
-/*       if (found_device[i] == 0){ */
-/* 	NRF_LOG_INFO(NRF_LOG_COLOR_CODE_RED"===Fail to find device %d ===\r\n", i+1); */
-/*       } */
-/*     } */
-/*   nrf_delay_ms(100); */
-/*   sd_nvic_SystemReset(); */
-/* } */
-
 static void run_test(){
   ret_code_t err_code;
   memset(&found_device, 0, sizeof(found_device));
   start_tick = app_timer_cnt_get();
   blend_sched_start();
+ 
 }
 
-static void set_blend_data()
-{
-  m_blend_data.data_length = m_data_len;
+//! Start inclusive, end exclusive.
+uint32_t rng_rand(int start,int end) {
+  uint8_t rand[4];
+  ret_code_t err_code;
+  uint8_t pool_avail = 0;
+
+  while (pool_avail <4) {
+    err_code = sd_rand_application_bytes_available_get(&pool_avail);
+    APP_ERROR_CHECK(err_code);       
+  }
+
+  err_code = sd_rand_application_vector_get(rand, 4);
+  APP_ERROR_CHECK(err_code);
+  uint32_t dice = abs(rand[0] + (rand[1]<<8) + (rand[2]<<16) + (rand[3]<<24));
+  return start + (dice % (end - start));
+}
+
+/**@brief Function for updating the beacon payload.
+ *
+ * @details This function will be called at the beginning of each epoch and update the payload accordingly.
+ *
+ * @param[in] sharing_type Context type that the host is sharing (Invalid identified by 0xFF).
+ * @param[in] ctx_val Sensor reading of the context being shared.
+ * @param[out] payload Pointer to the beacon payload array.
+ *
+ * @return Return status.
+ */
+uint32_t update_payload(uint8_t sharing_type, uint32_t ctx_val1, uint32_t ctx_val2, uint8_t* payload) {
+  payload[0] = PROTOCOL_ID;
+  payload[1] = DEVICE_ID;
+  payload[2] = node_lst_head->cap_vec & 0xFF; // Little endian
+  payload[3] = (node_lst_head->cap_vec >> 8);
+  payload[4] = node_lst_head->demand_vec & 0xFF;
+  payload[5] = (node_lst_head->demand_vec >> 8);
+  payload[6] = sharing_type;
+  uint8_t* vp = (uint8_t*) &ctx_val1;
+  for (int i = 0; i < 4; ++i) {
+    payload[7+i] = vp[i];
+  }
+  vp = (uint8_t*) &ctx_val2;
+  for (int i = 0; i < 4; ++i) {
+    payload[11+i] = vp[i];
+  }
+
+  m_blend_data.data_length = DATA_LENGTH;
   m_blend_data.data = payload;
   if (blend_advdata_set(&m_blend_data) != BLEND_NO_ERROR) {
     NRF_LOG_ERROR("Blend data set error");
+    return 1;
   }
+  return 0;
+}
+
+/**@brief Initialize the node's sensing equipment and tasks.
+*/
+uint32_t middleware_init(void) {
+  node_t* host = malloc(sizeof(node_t));
+  host->node_id = DEVICE_ID;
+  // TODO(liuchg): randomized init. for capabilities.
+  host->cap_vec = 0;
+  SetBit(host->cap_vec, 1);
+  SetBit(host->cap_vec, 2);
+  host->demand_vec = 0xFFFF;
+  host->next = NULL;
+
+  node_lst_head = host;
+
+  // Randomly assign a capapble task.
+  current_task_type = rng_rand(1, 3);
+  
+  return 0;
+}
+
+/**@brief Update the sensing task.
+ *
+ * Reselect the sensing task based on the current neighborhood. Output to global variable current_task_type.
+ */
+uint32_t update_sensing_task(void) {
+  // TODO(liuchg): Implement selection algorithm here.
+  current_task_type = rng_rand(1, 3);
+  if (current_task_type != TASK_IDLE) {
+    NRF_LOG_DEBUG("Selected  context type: %d.\r\n", current_task_type);
+  }
+  return 0;
+}
+
+/**@brief Query the sensor and update the payload, if current task is valid.
+ */
+uint32_t execute_sensing_task(void) {
+  if (current_task_type == TASK_IDLE) {
+    return 0;
+  }
+  // TODO(liuchg): Fetch the sensor reading and update the payload.
+  return 0;
+}
+
+/**@brief Context type visualization using the lightwell.
+*/
+uint32_t update_light(void) {
+  if (current_task_type >= 3) { // TODO(liuchg): enable real checking below.
+  //  if (current_task_type >= NUM_SENSOR_TYPE) {
+    NRF_LOG_ERROR("Update light error (task context type out of range.)");
+    return 1;
+  }
+  
+  //ret_code_t err_code = led_set(&led_colors[current_task_type],NULL);
+  ret_code_t err_code = led_set(&led_colors[2],NULL);
+  APP_ERROR_CHECK(err_code);
+  return 0;
+}
+
+/**@brief Decode the context exchange packet.
+*/
+decoded_packet_t decode(uint8_t * bytes) {
+    uint8_t ngbr_id = bytes[1];
+    uint16_t ngbr_cap = bytes[2] + (bytes[3] << 8);
+    uint16_t ngbr_demand = bytes[4] + (bytes[5] << 8);
+    uint8_t ctx_type = bytes[6];
+    uint16_t val1 = 0;
+    uint16_t val2 = 0;
+    if (ctx_type) {
+      val1 = bytes[7] + (bytes[8] << 8) + (bytes[9] << 16) + (bytes[10] << 24);
+    }
+    //TODO(liuchg): Process the extended field for rich types.
+    uint32_t cur_time = app_timer_cnt_get();
+    context_t cur_context = {ngbr_id, ctx_type, val1, val2, cur_time};
+    decoded_packet_t decoded = {ngbr_id, ngbr_cap, ngbr_demand, cur_context, cur_time};
+    return decoded;
+}
+
+/**@brief Update the neighbor list from received packet.
+*/
+uint32_t update_neighbor_list(decoded_packet_t* packet) {
+  node_t* prev = node_lst_head;
+  node_t* cur = prev->next;
+  while(cur && cur->node_id != packet->node_id) {
+    cur = cur->next;
+    prev = prev->next;
+  }
+  if (!cur) {
+    node_t* append_ngbr = malloc(sizeof(node_t));
+    append_ngbr->node_id = packet->node_id;
+    append_ngbr->cap_vec = packet->cap_vec;
+    append_ngbr->demand_vec = packet->demand_vec;
+    append_ngbr->last_sync_ms = packet->timestamp_ms;
+    append_ngbr->next = NULL;
+    prev->next = append_ngbr;
+  } else {
+    cur->last_sync_ms = packet->timestamp_ms;
+  }
+  //TODO(liuchg): remove lost nodes.
+  
+  return 0;
+}
+
+/**@brief Update the local context pool from received packet.
+*/
+uint32_t udpate_context_pool(decoded_packet_t* packet) {
+  context_t cur_context = packet->context;
+
+  uint8_t ctype = cur_context.ctx_type;
+  if (ctype && ctype < NUM_CONTEXT_TYPES) {
+    context_pool[ctype].ctx_type = ctype;
+    context_pool[ctype].source_id = cur_context.source_id;
+    context_pool[ctype].value1 = cur_context.value1;
+    context_pool[ctype].value2 = cur_context.value2;
+    context_pool[ctype].timestamp_ms = cur_context.timestamp_ms;
+  }
+  return 0;
 }
 
 static void m_blend_handler(blend_evt_t * p_blend_evt)
 {
-  if (p_blend_evt->evt_id == BLEND_EVT_ADV_REPORT) {
-      uint8_t * p_data = p_blend_evt->evt_data.data;
-      uint8_t dlen = p_blend_evt->evt_data.data_length;
-      int nbgr_id = p_data[0];
-      uint32_t now_time = app_timer_cnt_get();
-      uint8_t dis_flag = 0;
-      if (dis_flag == 0) {
-	found_device[nbgr_id - 1] = 1;
-	uint32_t time = app_timer_cnt_diff_compute(now_time, start_tick);
-	time = APP_TIMER_MS(time) & 0xffff;
-	NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN"===Found device %d At time: %d===\r\n", nbgr_id, time);
-      }
-      return;
+  switch (p_blend_evt->evt_id) {
+  case BLEND_EVT_ADV_REPORT: {
+    uint8_t * p_data = p_blend_evt->evt_data.data;
+    uint8_t plen = p_blend_evt->evt_data.data_length;
+    if (p_data[0] != PROTOCOL_ID || plen != DATA_LENGTH) {
+      break;
     }
-  if (p_blend_evt->evt_id == BLEND_EVT_EPOCH_START) {
-      epoch_count += 1;
-      ret_code_t err_code = led_set(&m_led_scan,NULL);
-      NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN"Epoch %d started.\r\n", epoch_count);
-      APP_ERROR_CHECK(err_code);
-    }	
-  if (p_blend_evt->evt_id == BLEND_EVT_AFTER_SCAN) {
-      ret_code_t err_code = led_set(&m_led_adv,NULL);
-      NRF_LOG_DEBUG("Scan stopped.\r\n", epoch_count);
-      APP_ERROR_CHECK(err_code);
+    decoded_packet_t decoded_packet = decode(p_data);
+    update_neighbor_list(&decoded_packet);
+    udpate_context_pool(&decoded_packet);
+    break;
     }
+  case BLEND_EVT_EPOCH_START: {
+    epoch_count += 1;  // CL: Overflow??
+    NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN"Epoch %d started.\r\n", epoch_count);
+    break;
+  }
+  case BLEND_EVT_AFTER_SCAN: {
+    NRF_LOG_DEBUG("Scan stopped.\r\n", epoch_count);
+
+    // JH: sample code for sample, read, and to_string the context type.
+    context_sample(0);
+    context_sample(1);
+    context_sample(2);
+    context_t temp = context_read(0);
+    context_t humid = context_read(1);
+    context_t press = context_read(2);
+    char* x = malloc(sizeof(char) * 30);
+    context2str(temp, x);
+    NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x);
+    context2str(humid, x);
+    NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x);
+    context2str(press, x);
+    NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x);
+    free(x);
+    // Update sensing task
+    update_sensing_task();
+    // Execute sensing task
+    execute_sensing_task();
+    // Update lightwell
+    update_light();
+
+    // Update beacon payload
+    if (update_payload(current_task_type, 7, 0, payload)) {
+      NRF_LOG_ERROR("Error when updating beacon payload.");
+    }
+    break;
+  }
+  default: {
+    NRF_LOG_ERROR("Event handler (invalid event type).");
+  }
+  }
+}
+
+void sensor_init()
+{
+  humidity_sensor_init(&m_twi_sensors);
+  pressure_sensor_init(&m_twi_sensors);
 }
 
 int main(void) {
-    uint32_t err_code;
-    err_code = NRF_LOG_INIT(NULL);
-    APP_ERROR_CHECK(err_code);
-		timer_init();
-	
-    // NRF_LOG_DEBUG("===== Blend mode %d started! =====\r\n", m_blend_param.blend_mode);
-    
-    APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
-    err_code = app_timer_init();
-    APP_ERROR_CHECK(err_code);
+  uint32_t err_code;
+  err_code = NRF_LOG_INIT(NULL);
+  APP_ERROR_CHECK(err_code);
+  timer_init();
 
-    board_init();
-    thingy_init();
-	
-    blend_init(m_blend_param, m_blend_handler, m_ble_service_handles);
-    set_blend_data();
+  blend_param_t m_blend_param = {epoch_length_ms, adv_interval_ms, BLEND_MODE_FULL};
+
+  NRF_LOG_DEBUG("===== Blend mode %d started! =====\r\n", m_blend_param.blend_mode);
+		
+  err_code = nrf_drv_rng_init(NULL);
+  APP_ERROR_CHECK(err_code);
+		
+  
+  APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
+  err_code = app_timer_init();
+  APP_ERROR_CHECK(err_code);
+
+  board_init();
+  thingy_init();
+  sensor_init();
+  blend_init(m_blend_param, m_blend_handler, m_ble_service_handles);
+
+  middleware_init();
+
+  run_test();
     
-    run_test();
-    
-    for (;;)
+  for (;;)
     {
-        app_sched_execute();
+      app_sched_execute();
 
-        if (!NRF_LOG_PROCESS()) // Process logs
+      if (!NRF_LOG_PROCESS()) // Process logs
         { 
-            power_manage();
+	  power_manage();
         }
     }
 }

@@ -43,6 +43,8 @@ $(abspath ../../../sdk_components/nfc/t2t_lib/nfc_t2t_lib_gcc.a) \
 #source common to all targets
 C_SOURCE_FILES += \
 $(abspath ../main.c) \
+$(abspath ../sensor.c) \
+$(abspath ../context.c) \
 $(abspath ../../../blend/blend.c) \
 $(abspath ../../../source/modules/m_ble.c) \
 $(abspath ../../../source/modules/m_ble_flash.c) \
@@ -151,6 +153,7 @@ $(abspath ../../../sdk_components/libraries/strerror/nrf_strerror.c) \
 ASM_SOURCE_FILES  = $(abspath ../../../sdk_components/toolchain/gcc/gcc_startup_nrf52.S)
 
 #includes common to all targets
+INC_PATHS += -I$(abspath ../)
 INC_PATHS += -I$(abspath ../config)
 INC_PATHS += -I$(abspath ../../../blend)
 INC_PATHS += -I$(abspath ../../../external/segger_rtt)
