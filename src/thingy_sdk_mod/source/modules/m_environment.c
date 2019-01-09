@@ -104,8 +104,6 @@ static void temperature_conv_data(float in_temp, ble_tes_temperature_t * p_out_t
     p_out_temp->integer = (int8_t)in_temp;
     f_decimal = in_temp - p_out_temp->integer;
     p_out_temp->decimal = (uint8_t)(f_decimal * 100.0f);
-    NRF_LOG_INFO("temperature_conv_data: Temperature: ,%d.%d,C\r\n", p_out_temp->integer, p_out_temp->decimal);
-    NRF_LOG_INFO("temperature delay: %d\r\n", APP_TIMER_MS(app_timer_cnt_diff_compute(app_timer_cnt_get(),_env_temp_start)));
 }
 
 
@@ -114,8 +112,6 @@ static void temperature_conv_data(float in_temp, ble_tes_temperature_t * p_out_t
 static void humidity_conv_data(uint8_t humid, ble_tes_humidity_t * p_out_humid)
 {
    *p_out_humid = (uint8_t)humid;
-   NRF_LOG_INFO("humidity_conv_data: Relative Humidty: ,%d,%%\r\n", humid);
-   NRF_LOG_INFO("temperature delay: %d\r\n", APP_TIMER_MS(app_timer_cnt_diff_compute(app_timer_cnt_get(),_env_temp_start)));
 }
 
 
@@ -128,8 +124,6 @@ static void pressure_conv_data(float in_press, ble_tes_pressure_t * p_out_press)
     p_out_press->integer = (int32_t)in_press;
     f_decimal = in_press - p_out_press->integer;
     p_out_press->decimal = (uint8_t)(f_decimal * 100.0f);
-    NRF_LOG_INFO("pressure_conv_data: Pressure/Altitude: %d.%d Pa/m\r\n", p_out_press->integer, p_out_press->decimal);
-    NRF_LOG_INFO("pressure delay: %d\r\n", APP_TIMER_MS(app_timer_cnt_diff_compute(app_timer_cnt_get(),_env_pressure_start)));
 }
 
 
