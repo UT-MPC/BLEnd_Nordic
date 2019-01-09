@@ -20,6 +20,9 @@
 temperature_t _temp_cache;
 humidity_t _humid_cache;
 pressure_t _pressure_cache;
+color_t _color_cache;
+
+static color_config_t m_color_config = COLOR_CONFIG_DEFAULT;
 
 void m_temperature2str(void* temp_p, char* str){
   temperature_t temp_in = *((temperature_t*)temp_p);
@@ -34,6 +37,11 @@ void m_humidity2str(void* humid_p, char* str){
 void m_pressure2str(void* pressure_p, char* str){
   pressure_t pressure_in = *((pressure_t*)pressure_p);
   sprintf(str, "Pressure: %d.%d hPa\r\n", pressure_in.integer, pressure_in.decimal);
+}
+
+void m_color2str(void* color_p, char* str){
+  color_t color_in = *((color_t*)color_p);
+  sprintf(str, "Color: (%d, %d, %d, %d) \r\n", color_in.red, color_in.green, color_in.blue, color_in.clear);
 }
 
 /**@brief Function for converting the temperature sample.
@@ -84,14 +92,24 @@ void m_pressure_read(void** data_ptr){
   *data_ptr = &_pressure_cache;
   return;
 }
-
+void m_color_read(void** data_ptr){
+  *data_ptr = &_color_cache;
+  return;
+}
 void drv_humidity_evt_handler(drv_humidity_evt_t event)
 {
   uint32_t err_code;
   if (event == DRV_HUMIDITY_EVT_DATA)
   {
+    
     float temperature = drv_humidity_temp_get();
     uint16_t humidity = drv_humidity_get();
+    // if (m_calib_gas_sensor == true)
+    // {
+    //     err_code = calibrate_gas_sensor(humidity, temperature);
+    //     APP_ERROR_CHECK(err_code);
+    //     m_calib_gas_sensor = false;
+    // }
     temperature_t new_temp;
     humidity_t new_humid;
     temperature_conv_data(temperature,&_temp_cache);
@@ -123,6 +141,23 @@ static void drv_pressure_evt_handler(drv_pressure_evt_t const * p_event)
       break;
   }
 }
+
+/**@brief Color sensor data handler.
+ */
+static void drv_color_data_handler(drv_color_data_t const * p_data)
+{
+  (void)drv_ext_light_off(DRV_EXT_RGB_LED_SENSE);
+
+  if (p_data != NULL)
+  {
+    _color_cache.red   = p_data->red;
+    _color_cache.green = p_data->green;
+    _color_cache.blue  = p_data->blue;
+    _color_cache.clear = p_data->clear;
+    _color_cache.timestamp = app_timer_cnt_get();
+  }
+}
+
 uint32_t humidity_sensor_init(nrf_drv_twi_t const * p_twi_instance)
 {
   ret_code_t  err_code = NRF_SUCCESS;
@@ -167,6 +202,48 @@ uint32_t pressure_sensor_init(const nrf_drv_twi_t * p_twi_instance)
 
   return drv_pressure_init(&init_params);
 }
+uint32_t color_sensor_init(const nrf_drv_twi_t * p_twi_instance)
+{
+    uint32_t err_code;
+    drv_color_init_t init_params;
+
+    static const nrf_drv_twi_config_t twi_config =
+    {
+        .scl                = TWI_SCL,
+        .sda                = TWI_SDA,
+        .frequency          = NRF_TWI_FREQ_400K,
+        .interrupt_priority = APP_IRQ_PRIORITY_LOW
+    };
+
+    init_params.p_twi_instance = p_twi_instance;
+    init_params.p_twi_cfg      = &twi_config;
+    init_params.twi_addr       = BH1745_ADDR;
+    init_params.data_handler   = drv_color_data_handler;
+
+    err_code = drv_color_init(&init_params);
+    RETURN_IF_ERROR(err_code);
+
+    return NRF_SUCCESS;
+}
+void m_color_sample(void)
+{
+  ret_code_t err_code;
+  drv_ext_light_rgb_intensity_t color;
+
+  color.r = m_color_config.led_red;
+  color.g = m_color_config.led_green;
+  color.b = m_color_config.led_blue;
+
+  (void)drv_ext_light_rgb_intensity_set(DRV_EXT_RGB_LED_SENSE, &color);
+
+  err_code = drv_color_start();
+  APP_ERROR_CHECK(err_code);
+
+  err_code = drv_color_sample();
+  APP_ERROR_CHECK(err_code);
+
+}
+
 
 void m_humidity_sample(){
   ret_code_t err_code;
@@ -192,4 +269,16 @@ uint32_t m_humidity_disable(){
 
 uint32_t m_pressure_disable(){
   return drv_pressure_disable();
+}
+
+uint32_t m_color_disable()
+{
+  uint32_t err_code;
+
+  (void)drv_ext_light_off(DRV_EXT_RGB_LED_SENSE);
+
+  err_code = drv_color_stop();
+  APP_ERROR_CHECK(err_code);
+
+  return NRF_SUCCESS;
 }

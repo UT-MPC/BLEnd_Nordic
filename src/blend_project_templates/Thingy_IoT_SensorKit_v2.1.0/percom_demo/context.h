@@ -8,6 +8,15 @@
 #include <stdlib.h>
 #define NUM_CONTEXT_TYPES 16
 
+
+typedef enum
+{
+    TEMP_CTX,
+    HUMID_CTX,
+    PRESS_CTX,
+    COLOR_CTX
+}ctx_type_def;
+
 /*! \brief Structure for context values.
  */
 typedef struct {

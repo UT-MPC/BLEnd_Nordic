@@ -448,7 +448,7 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     break;
     }
   case BLEND_EVT_EPOCH_START: {
-    epoch_count += 1;  // CL: Overflow??
+    epoch_count += 1;  // CL: Overflow?? JH: can delete in the final version.
     NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN"Epoch %d started.\r\n", epoch_count);
     break;
   }
@@ -456,18 +456,22 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     NRF_LOG_DEBUG("Scan stopped.\r\n", epoch_count);
 
     // JH: sample code for sample, read, and to_string the context type.
-    context_sample(0);
-    context_sample(1);
-    context_sample(2);
-    context_t temp = context_read(0);
-    context_t humid = context_read(1);
-    context_t press = context_read(2);
+    context_sample(TEMP_CTX);
+    context_sample(HUMID_CTX);
+    context_sample(PRESS_CTX);
+    context_sample(COLOR_CTX);
+    context_t temp = context_read(TEMP_CTX);
+    context_t humid = context_read(HUMID_CTX);
+    context_t press = context_read(PRESS_CTX);
+    context_t color = context_read(COLOR_CTX);
     char* x = malloc(sizeof(char) * 30);
     context2str(temp, x);
     NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x);
     context2str(humid, x);
     NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x);
     context2str(press, x);
+    NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x);
+    context2str(color, x);
     NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x);
     free(x);
     // Update sensing task
@@ -493,6 +497,7 @@ void sensor_init()
 {
   humidity_sensor_init(&m_twi_sensors);
   pressure_sensor_init(&m_twi_sensors);
+  color_sensor_init(&m_twi_sensors);
 }
 
 int main(void) {

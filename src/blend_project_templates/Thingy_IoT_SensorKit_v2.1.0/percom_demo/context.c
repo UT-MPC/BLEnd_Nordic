@@ -10,16 +10,37 @@
 void temp2ctx(void* temp_in, context_t* context_out);
 void humid2ctx(void* temp_in, context_t* context_out);
 void pressure2ctx(void* temp_in, context_t* context_out);
+void color2ctx(void* temp_in, context_t* context_out);
+
 void ctx2temp(context_t* , void** );
 void ctx2humid(context_t* , void** );
 void ctx2pressure(context_t* , void** );
+void ctx2color(context_t* , void** );
 
-char* ctx_name[]={"Temperature", "Humidity", "Pressure"};
-sensor2ctx_func_t sensor2ctx_func[]={temp2ctx, humid2ctx, pressure2ctx};
-ctx2sensor_func_t ctx2sensor_func[]={ctx2temp, ctx2humid, ctx2pressure};
-sensor_sample_func_t sensor_sample_func[]={m_humidity_sample, m_humidity_sample, m_pressure_sample};
-sensor_read_func_t sensor_read_func[]={m_temperature_read, m_humidity_read, m_pressure_read};
-sensor2str_func_t sensor2str_func[]={m_temperature2str, m_humidity2str, m_pressure2str};
+char* ctx_name[]={"Temperature", "Humidity", "Pressure", "Color"};
+sensor2ctx_func_t sensor2ctx_func[]={temp2ctx, humid2ctx, pressure2ctx, color2ctx};
+ctx2sensor_func_t ctx2sensor_func[]={ctx2temp, ctx2humid, ctx2pressure, ctx2color};
+sensor_sample_func_t sensor_sample_func[]={m_humidity_sample, m_humidity_sample, m_pressure_sample, m_color_sample};
+sensor_read_func_t sensor_read_func[]={m_temperature_read, m_humidity_read, m_pressure_read, m_color_read};
+sensor2str_func_t sensor2str_func[]={m_temperature2str, m_humidity2str, m_pressure2str, m_color2str};
+
+void color2ctx(void* color_in, context_t* context_out){
+  color_t color = *((color_t*)color_in);
+  context_out->timestamp_ms = color.timestamp;
+  context_out->value1 = (color.red << 16) + color.green;          // red | green
+  context_out->value2 = (color.blue << 16) + color.clear;          // blue | clear
+  return;
+}
+void ctx2color(context_t* context_in, void** sensor_p){
+  color_t* color;
+  color = malloc(sizeof(color_t));
+  color->red = context_in->value1 >> 16;
+  color->green = context_in->value1 & 0xffff;
+  color->blue = context_in->value2 >> 16;
+  color->clear = context_in->value2 & 0xffff;
+  *sensor_p = color;
+  return;
+}
 
 void temp2ctx(void* temp_in, context_t* context_out){
   temperature_t temp = *((temperature_t*)temp_in);
