@@ -37,6 +37,7 @@ enum blend_error_t{
   BLEND_NO_ERROR,
   BLEND_DATA_OVERFLOW,
   BLEND_BI_DIR_OVERFLOW,
+  BLEND_DATA_IN_SINK_MODE,
 };
 
 /**

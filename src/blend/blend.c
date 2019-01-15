@@ -526,6 +526,10 @@ void beacon_count_timer_handler (void * p_context) {
 }
 
 void blend_sched_start() {
+  if (_blend_mode == BLEND_MODE_SINK){
+    _blend_scan_sd_start();
+    return;
+  }
   ret_code_t err_code;
   _epoch_flag = 1;
   err_code=app_timer_start(half_epoch_timer,APP_TIMER_TICKS(_epoch_length_ms /2), NULL);
@@ -556,18 +560,24 @@ void blend_timer_set(void) {
 }
 
 void blend_param_set(blend_param_t input) {
+  _blend_mode = input.blend_mode;
+  if (_blend_mode == BLEND_MODE_SINK) {
+    return;
+  }
   _epoch_length_ms = input.epoch_length_ms;
   _adv_interval_ms = input.adv_interval_ms;
   _scan_duration_ms = (_adv_interval_ms + 5 + 10);
   _shadow_beacons = (uint8_t *) malloc( (ROUNDED_DIV(_epoch_length_ms , _adv_interval_ms) + 2) * sizeof(uint8_t)) ;
   _mid_beacon = ((_epoch_length_ms / 2) - _scan_duration_ms + _adv_interval_ms / 2 ) / _adv_interval_ms ;
-  _blend_mode = input.blend_mode;
 }
 
 blend_ret_t blend_advdata_set(blend_data_t *input) {
   uint8_t dlen = input->data_length;
   uint8_t * payload = input->data;
 	
+  if (_blend_mode == BLEND_MODE_SINK) {
+    return BLEND_DATA_IN_SINK_MODE;
+  }
   if (dlen > BLEND_USER_PAYLOAD_SIZE) {
     return BLEND_DATA_OVERFLOW;
   }
