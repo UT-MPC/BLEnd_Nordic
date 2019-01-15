@@ -44,8 +44,9 @@ enum blend_error_t{
  */
 enum blend_mode_t{
   BLEND_MODE_FULL,
-  BLEND_MODE_UNI, // TODO(jie): Not supported?
+  BLEND_MODE_UNI,
   BLEND_MODE_BI,
+  BLEND_MODE_SINK // for debug purpose.
 };
 
 /**
