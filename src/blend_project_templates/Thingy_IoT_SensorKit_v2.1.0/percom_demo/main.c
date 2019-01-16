@@ -90,7 +90,8 @@
 #define MAX_DEVICE 10
 #define DATA_LENGTH 15
 #define NUM_ENABLED_SENSOR 8
-#define TASK_IDLE 0
+//! Senisng task id = context type id + TASK_OFFET (Zero for idle)
+#define TASK_OFFSET 1
 
 #define SetBit(A,k) (A |= (1 << (k%NUM_CONTEXT_TYPES)))
 #define ClearBit(A,k) (A &= ~(1 << (k%NUM_CONTEXT_TYPES)))
@@ -136,8 +137,9 @@ typedef struct node {
 node_t* node_lst_head;
 /*!< Container for the context values shared and received in the neighborhood(indexed by context type). */
 context_t context_pool[NUM_CONTEXT_TYPES];
-/*!< Context type of the current sharing task. TASK_IDLE (i.e. 0) for invalid. */
+/*!< Context type of the current sharing task. Use TASK_OFFSET in beacons (<OFFSET is invalid). */
 uint8_t current_task_type;
+uint8_t task_type_offset;
 
 
 void app_error_fault_handler(uint32_t id, uint32_t pc, uint32_t info)
@@ -321,7 +323,7 @@ uint32_t middleware_init(void) {
   node_lst_head = host;
 
   // Randomly assign a capapble task.
-  current_task_type = rng_rand(1, 3);
+  current_task_type = rng_rand(0, 2) + TASK_OFFSET;
   
   return 0;
 }
@@ -332,13 +334,13 @@ uint32_t middleware_init(void) {
  */
 uint32_t update_sensing_task(void) {
   // TODO(liuchg): Implement selection algorithm here.
-  current_task_type = rng_rand(1, 3);
-  if (current_task_type != TASK_IDLE) {
+  current_task_type = rng_rand(1, 3) - TASK_OFFSET;
+  if (current_task_type) {
     NRF_LOG_DEBUG("Selected  context type: %d.\r\n", current_task_type);
   }
   // JH: The code below is only a testbed for Christine to create the Android code.
-  context_sample(current_task_type - 1);
-  context_t reading = context_read(current_task_type - 1);
+  context_sample(current_task_type1);
+  context_t reading = context_read(current_task_type);
   
   return 0;
 }
@@ -346,7 +348,7 @@ uint32_t update_sensing_task(void) {
 /**@brief Query the sensor and update the payload, if current task is valid.
  */
 uint32_t execute_sensing_task(void) {
-  if (current_task_type == TASK_IDLE) {
+  if (current_task_type - TASK_OFFSET) {
     return 0;
   }
   // TODO(liuchg): Fetch the sensor reading and update the payload.
@@ -356,8 +358,8 @@ uint32_t execute_sensing_task(void) {
 /**@brief Context type visualization using the lightwell.
 */
 uint32_t update_light(void) {
-  if (current_task_type >= 3) { // TODO(liuchg): enable real checking below.
-  //  if (current_task_type >= NUM_SENSOR_TYPE) {
+  if (current_task_type - TASK_OFFSET >= 2) { // TODO(liuchg): enable real checking below.
+  //  if (current_task_type - TASK_OFFSET >= NUM_SENSOR_TYPE) {
     NRF_LOG_ERROR("Update light error (task context type out of range.)");
     return 1;
   }
