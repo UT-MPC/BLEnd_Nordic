@@ -1,6 +1,0 @@
-{
-    "files.associations": {
-        "m_environment.h": "c",
-        "nrf_log_ctrl.h": "c"
-    }
-}

@@ -34,6 +34,10 @@
   HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
   LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
   OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+  NOTE: This file has been changed by people outside Nordic
+  Semiconductor ASA. The original file is available on Nordic Thiny52
+  github repo.
  */
 #include "m_motion.h"
 
