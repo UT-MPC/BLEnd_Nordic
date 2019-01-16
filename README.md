@@ -23,6 +23,9 @@ $> chmod u+x setup.sh
 $> ./setup.sh
 ```
 
+Percom Demo:
+> TODO
+
 ## Supported Hardware and SDKs
 During installation you will be asked to select one of the supported
 version before and the script will automatically download and
@@ -50,10 +53,11 @@ $> make flash
 ```
 
 ## License and Citation
-The BLEnd scheduler and is released under the BSD 3-Clause license.
+The BLEnd scheduler and the sample projects are released under the BSD 3-Clause license.
 
-Please using the following reference in your publications if it helps your research:
+Please use the following reference in your publications if this project helps your research:
 
+_BLEnd Scheduler_
 ```
 @inproceedings{julien2017blend,
   title={BLEnd: practical continuous neighbor discovery for Bluetooth low energy},
@@ -62,5 +66,16 @@ Please using the following reference in your publications if it helps your resea
   pages={105--116},
   year={2017},
   organization={ACM}
+}
+```
+
+_Stacon_
+```
+@inproceedings{liu2019stacon,
+  title={Stacon: Self-Stabilizing Context Neighborhood for Mobile IoT Devices},
+  author={Liu, Chenguang and Hua, Jie and Hu, Changyong and Julien, Christine},
+  booktitle={Proceedings of the 17th IEEE International Conference on Pervasive Computing and Communications Workshops (PerCom Workshops)},
+  year={2019},
+  organization={IEEE}
 }
 ```
