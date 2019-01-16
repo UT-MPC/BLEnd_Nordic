@@ -334,12 +334,12 @@ uint32_t middleware_init(void) {
  */
 uint32_t update_sensing_task(void) {
   // TODO(liuchg): Implement selection algorithm here.
-  current_task_type = rng_rand(1, 3) - TASK_OFFSET;
+  current_task_type = rng_rand(1, 5) - TASK_OFFSET;
   if (current_task_type) {
     NRF_LOG_DEBUG("Selected  context type: %d.\r\n", current_task_type);
   }
   // JH: The code below is only a testbed for Christine to create the Android code.
-  context_sample(current_task_type1);
+  context_sample(current_task_type);
   context_t reading = context_read(current_task_type);
   
   return 0;

@@ -8,8 +8,8 @@ Identifying “who is around” is key in a plethora of smart scenarios. This pr
 ### Prerequisites
 - (Common) `ARM GCC` for compiling the SDK and your project: [Link to (GNU Arm Embedded Toolchain)](https://developer.arm.com/open-source/gnu-toolchain/gnu-rm)
 - (Common) nRF5x Command Line Tools `nrfjprog`: [Link to (installlation instructions from Nordic Semiconductor)](http://infocenter.nordicsemi.com/index.jsp?topic=%2Fcom.nordic.infocenter.tools%2Fdita%2Ftools%2Fnrf5x_command_line_tools%2Fnrf5x_nrfjprogexe.html)
-- (Thingy-specific) Bluetooth softdevice _s132_: [Link to (download page from Nordic Semiconductor)](https://www.nordicsemi.com/eng/nordic/Products/nRF52832/S132-SD-v4/58803)
-- (Thingy-specific) Motion driver: Download the `Embedded MotionDriver` from [https://www.invensense.com/](https://www.invensense.com/) or elsewhere. Extract and put the `liblibmplmpu.a` file into `(thingy_sdk)/libs/liblibmplmpu_m4_hardfp` folder (you may need to create the folder first).
+- (Thingy-specific) Bluetooth softdevice 4.0.5 S132: [Link to (download page from Nordic Semiconductor)](https://www.nordicsemi.com/Software-and-Tools/Software/S132/Download)
+- (Thingy-specific) Motion driver: Create an account at [https://www.invensense.com/](https://www.invensense.com/). Under "Developers -> Software Downloads" download the `Embedded MotionDriver 6.12`. Under the path `motion_driver_6.12/mpl libraries/arm/gcc4.9.3`, unzip `liblibmplmpu_m4_hardfp.zip` and put the `liblibmplmpu.a` file into `(thingy_sdk)/libs/liblibmplmpu_m4_hardfp` folder (you may need to create the folder first). If you don't want to create an account, you can find other source of the driver on google.
 - (Thingy-specific) Install `JLinkARM` for flashing using a nRF52 PDK: [Link to (download page from SEGGER)](https://www.segger.com/jlink-software.html?step=1&file=JLink_510d).
 
 ### Installing
