@@ -141,6 +141,7 @@ context_t context_pool[NUM_CONTEXT_TYPES];
 uint8_t current_task_type;
 uint8_t task_type_offset;
 
+context_t saved_reading;
 
 void app_error_fault_handler(uint32_t id, uint32_t pc, uint32_t info)
 {
@@ -334,13 +335,13 @@ uint32_t middleware_init(void) {
  */
 uint32_t update_sensing_task(void) {
   // TODO(liuchg): Implement selection algorithm here.
-  current_task_type = rng_rand(1, 5) - TASK_OFFSET;
+  current_task_type = rng_rand(1, 3) - TASK_OFFSET;
   if (current_task_type) {
     NRF_LOG_DEBUG("Selected  context type: %d.\r\n", current_task_type);
   }
   // JH: The code below is only a testbed for Christine to create the Android code.
   context_sample(current_task_type);
-  context_t reading = context_read(current_task_type);
+  saved_reading = context_read(current_task_type);
   
   return 0;
 }
@@ -379,9 +380,7 @@ decoded_packet_t decode(uint8_t * bytes) {
     uint8_t ctx_type = bytes[6];
     uint16_t val1 = 0;
     uint16_t val2 = 0;
-    if (ctx_type) {
-      val1 = bytes[7] + (bytes[8] << 8) + (bytes[9] << 16) + (bytes[10] << 24);
-    }
+    val1 = bytes[7] + (bytes[8] << 8) + (bytes[9] << 16) + (bytes[10] << 24);
     //TODO(liuchg): Process the extended field for rich types.
     uint32_t cur_time = app_timer_cnt_get();
     context_t cur_context = {ngbr_id, ctx_type, val1, val2, cur_time};
@@ -436,12 +435,20 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
   case BLEND_EVT_ADV_REPORT: {
     uint8_t * p_data = p_blend_evt->evt_data.data;
     uint8_t plen = p_blend_evt->evt_data.data_length;
-    if (p_data[0] != PROTOCOL_ID || plen != DATA_LENGTH) {
+    // JH: plen here is not the actual length of the data. Since BLEnd does not have a 
+    // byte to denote length, all the data length is the maximum length which is 26 here.
+    //if (p_data[0] != PROTOCOL_ID || plen != DATA_LENGTH) {
+    if (p_data[0] != PROTOCOL_ID) {
       break;
     }
     decoded_packet_t decoded_packet = decode(p_data);
     update_neighbor_list(&decoded_packet);
     udpate_context_pool(&decoded_packet);
+    // For debug purpose
+    char* x = malloc(sizeof(char) * 30);
+    context2str(decoded_packet.context, x);
+    NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN "Read context: %s from node %d\r\n", (uint32_t)x, decoded_packet.context.source_id);
+    free(x);
     break;
     }
   case BLEND_EVT_EPOCH_START: {
@@ -476,7 +483,7 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     update_light();
 
     // Update beacon payload
-    if (update_payload(current_task_type, 7, 0, payload)) {
+    if (update_payload(saved_reading.ctx_type, saved_reading.value1, saved_reading.value2, payload)) {
       NRF_LOG_ERROR("Error when updating beacon payload.");
     }
     break;
