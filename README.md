@@ -21,7 +21,7 @@ $> git clone git@github.com:UT-MPC/BLEnd_Nordic.git
 $> cd BLEnd_Nordic
 $> chmod u+x setup.sh
 $> ./setup.sh
-($> run SDK setup script in the download directory)
+($> run SDK setup script in the downloaded directory)
 ```
 
 ### Percom Demo (Stacon):
@@ -54,10 +54,20 @@ $> make flash
 ```
 
 ## Debug terminal (RTT)
-1. Connect to the dev. board using `JLinkExe`:
-```bash
+1. Connect to the DEV board using `JLinkExe` (or connect Thingy52 via a SWD cable):
+   - Start JLinkExe in the terminal.
+   ```bash
      JLinkExe  -device nrf52 -if swd -speed 4000;
-```
+   ```
+   - Run `connect` in JLinkExe:
+   ```bash
+   JLink>connect
+   ```
+   - (And you should see a message)
+   ```bash
+   Cortex-M4 identified.
+   ```
+   
 2. Open the RTT client:
 ```bash
      JLinkRTTClient
