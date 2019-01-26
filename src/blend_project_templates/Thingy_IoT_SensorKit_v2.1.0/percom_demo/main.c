@@ -111,7 +111,7 @@ blend_data_t m_blend_data;
 
 static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
 
-static const ble_uis_led_t led_colors[5] = {LED_CONFIG_RED, LED_CONFIG_PURPLE, LED_CONFIG_BLUE, LED_CONFIG_GREEN, LED_CONFIG_WHITE};
+static const ble_uis_led_t led_colors[5] = {LED_CONFIG_GREEN, LED_CONFIG_PURPLE, LED_CONFIG_BLUE, LED_CONFIG_RED, LED_CONFIG_WHITE};
 
 uint8_t on_scan_flag  = 0;
 uint8_t discovered = 0;
@@ -283,6 +283,12 @@ uint32_t rng_rand(int start,int end) {
  * @return Return status.
  */
 uint32_t update_payload(context_t context_in, uint8_t* payload) {
+  // For debug purpose
+  /* char* x = malloc(sizeof(char) * 30); */
+  /* context2str(context_in, x); */
+  /* NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN "Encoding context: %s.\r\n", (uint32_t)x); */
+  /* free(x); */
+  
   //uint8_t sharing_type, uint32_t ctx_val1, uint32_t ctx_val2, uint8_t* payload
   payload[0] = PROTOCOL_ID;
   payload[1] = DEVICE_ID;
@@ -335,9 +341,11 @@ uint32_t middleware_init(void) {
  */
 uint32_t update_sensing_task(void) {
   // TODO(liuchg): Implement selection algorithm here.
-  current_task_type = rng_rand(1, 3) - TASK_OFFSET;
-  if (current_task_type) {
-    NRF_LOG_DEBUG("Selected  context type: %d.\r\n", current_task_type);
+  current_task_type = rng_rand(1, 3);
+  if (current_task_type >= TASK_OFFSET) {
+    NRF_LOG_DEBUG("Context task selected: %d.\r\n", current_task_type - TASK_OFFSET);
+  } else {
+    NRF_LOG_DEBUG("Context task selected: Idle.\r\n");
   }
   return 0;
 }
@@ -345,27 +353,27 @@ uint32_t update_sensing_task(void) {
 /**@brief Query the sensor and update the payload, if current task is valid.
  */
 uint32_t execute_sensing_task(void) {
-  if (current_task_type - TASK_OFFSET) {
+  if (current_task_type < TASK_OFFSET) {
     return 0;
   }
   // TODO(liuchg): Fetch the sensor reading and update the payload.
   // JH: The code below is only a testbed for Christine to create the Android code.
-  context_sample(current_task_type);
-  saved_reading = context_read(current_task_type);
+  context_sample(current_task_type - TASK_OFFSET);
+  saved_reading = context_read(current_task_type - TASK_OFFSET);
   return 0;
 }
 
 /**@brief Context type visualization using the lightwell.
 */
 uint32_t update_light(void) {
-  if (current_task_type - TASK_OFFSET >= 2) { // TODO(liuchg): enable real checking below.
+  if (current_task_type - TASK_OFFSET >= 5) { // TODO(liuchg): enable real checking below.
   //  if (current_task_type - TASK_OFFSET >= NUM_SENSOR_TYPE) {
     NRF_LOG_ERROR("Update light error (task context type out of range.)");
     return 1;
   }
   
-  //ret_code_t err_code = led_set(&led_colors[current_task_type],NULL);
-  ret_code_t err_code = led_set(&led_colors[2],NULL);
+  ret_code_t err_code = led_set(&led_colors[current_task_type],NULL);
+  //ret_code_t err_code = led_set(&led_colors[2],NULL);
   APP_ERROR_CHECK(err_code);
   return 0;
 }
@@ -456,24 +464,24 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
   case BLEND_EVT_AFTER_SCAN: {
 
     // JH: sample code for sample, read, and to_string the context type.
-    // context_sample(TEMP_CTX);
-    // context_sample(HUMID_CTX);
-    // context_sample(PRESS_CTX);
-    // context_sample(COLOR_CTX);
-    // context_t temp = context_read(TEMP_CTX);
-    // context_t humid = context_read(HUMID_CTX);
-    // context_t press = context_read(PRESS_CTX);
-    // context_t color = context_read(COLOR_CTX);
-    // char* x = malloc(sizeof(char) * 30);
-    // context2str(temp, x);
-    // NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x);
-    // context2str(humid, x);
-    // NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x);
-    // context2str(press, x);
-    // NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x);
-    // context2str(color, x);
-    // NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x);
-    // free(x);
+    /* context_sample(TEMP_CTX); */
+    /* context_sample(HUMID_CTX); */
+    /* context_sample(PRESS_CTX); */
+    /* context_sample(COLOR_CTX); */
+    /* context_t temp = context_read(TEMP_CTX); */
+    /* context_t humid = context_read(HUMID_CTX); */
+    /* context_t press = context_read(PRESS_CTX); */
+    /* context_t color = context_read(COLOR_CTX); */
+    /* char* x = malloc(sizeof(char) * 30); */
+    /* context2str(temp, x); */
+    /* NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x); */
+    /* context2str(humid, x); */
+    /* NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x); */
+    /* context2str(press, x); */
+    /* NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x); */
+    /* context2str(color, x); */
+    /* NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x); */
+    /* free(x); */
     // Update sensing task
     update_sensing_task();
     // Execute sensing task
