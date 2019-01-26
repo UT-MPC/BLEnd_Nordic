@@ -277,25 +277,25 @@ uint32_t rng_rand(int start,int end) {
  *
  * @details This function will be called at the beginning of each epoch and update the payload accordingly.
  *
- * @param[in] sharing_type Context type that the host is sharing (Invalid identified by 0xFF).
- * @param[in] ctx_val Sensor reading of the context being shared.
+ * @param[in] context_t Context that the host is sharing (Invalid type identified by 0xFF).
  * @param[out] payload Pointer to the beacon payload array.
  *
  * @return Return status.
  */
-uint32_t update_payload(uint8_t sharing_type, uint32_t ctx_val1, uint32_t ctx_val2, uint8_t* payload) {
+uint32_t update_payload(context_t context_in, uint8_t* payload) {
+  //uint8_t sharing_type, uint32_t ctx_val1, uint32_t ctx_val2, uint8_t* payload
   payload[0] = PROTOCOL_ID;
   payload[1] = DEVICE_ID;
-  payload[2] = node_lst_head->cap_vec & 0xFF; // Little endian
-  payload[3] = (node_lst_head->cap_vec >> 8);
-  payload[4] = node_lst_head->demand_vec & 0xFF;
-  payload[5] = (node_lst_head->demand_vec >> 8);
-  payload[6] = sharing_type;
-  uint8_t* vp = (uint8_t*) &ctx_val1;
+  payload[2] = (node_lst_head->cap_vec >> 8); // Big endian
+  payload[3] = node_lst_head->cap_vec & 0xFF;
+  payload[4] = (node_lst_head->demand_vec >> 8);
+  payload[5] = node_lst_head->demand_vec & 0xFF;
+  payload[6] = context_in.ctx_type;
+  uint8_t* vp = (uint8_t*) &(context_in.value1);
   for (int i = 0; i < 4; ++i) {
     payload[7+i] = vp[i];
   }
-  vp = (uint8_t*) &ctx_val2;
+  vp = (uint8_t*) &(context_in.value2);
   for (int i = 0; i < 4; ++i) {
     payload[11+i] = vp[i];
   }
@@ -339,10 +339,6 @@ uint32_t update_sensing_task(void) {
   if (current_task_type) {
     NRF_LOG_DEBUG("Selected  context type: %d.\r\n", current_task_type);
   }
-  // JH: The code below is only a testbed for Christine to create the Android code.
-  context_sample(current_task_type);
-  saved_reading = context_read(current_task_type);
-  
   return 0;
 }
 
@@ -353,6 +349,9 @@ uint32_t execute_sensing_task(void) {
     return 0;
   }
   // TODO(liuchg): Fetch the sensor reading and update the payload.
+  // JH: The code below is only a testbed for Christine to create the Android code.
+  context_sample(current_task_type);
+  saved_reading = context_read(current_task_type);
   return 0;
 }
 
@@ -375,8 +374,8 @@ uint32_t update_light(void) {
 */
 decoded_packet_t decode(uint8_t * bytes) {
     uint8_t ngbr_id = bytes[1];
-    uint16_t ngbr_cap = bytes[2] + (bytes[3] << 8);
-    uint16_t ngbr_demand = bytes[4] + (bytes[5] << 8);
+    uint16_t ngbr_cap = bytes[3] + (bytes[2] << 8);
+    uint16_t ngbr_demand = bytes[5] + (bytes[4] << 8);
     uint8_t ctx_type = bytes[6];
     uint16_t val1 = 0;
     uint16_t val2 = 0;
@@ -483,7 +482,7 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     update_light();
 
     // Update beacon payload
-    if (update_payload(saved_reading.ctx_type, saved_reading.value1, saved_reading.value2, payload)) {
+    if (update_payload(saved_reading, payload)) {
       NRF_LOG_ERROR("Error when updating beacon payload.");
     }
     break;
