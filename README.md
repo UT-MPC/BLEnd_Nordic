@@ -21,10 +21,11 @@ $> git clone git@github.com:UT-MPC/BLEnd_Nordic.git
 $> cd BLEnd_Nordic
 $> chmod u+x setup.sh
 $> ./setup.sh
+($> run SDK setup script in the download directory)
 ```
 
-Percom Demo:
-> TODO
+### Percom Demo (Stacon):
+> Run the setup script with option **2** and then check out `sdk/Nordic-Thingy52-FW-2.1.0/project/percom_demo`.
 
 ## Supported Hardware and SDKs
 During installation you will be asked to select one of the supported
@@ -50,6 +51,16 @@ Template project location:  (path_to_directory_on_your_disk)
 $> cd (path_to_directory_on_your_disk)/armgcc
 $> make
 $> make flash
+```
+
+## Debug terminal (RTT)
+1. Connect to the dev. board using `JLinkExe`:
+```bash
+     JLinkExe  -device nrf52 -if swd -speed 4000;
+```
+2. Open the RTT client:
+```bash
+     JLinkRTTClient
 ```
 
 ## License and Citation
