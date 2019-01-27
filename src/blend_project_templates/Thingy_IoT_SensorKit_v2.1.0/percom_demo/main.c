@@ -38,16 +38,15 @@
 
 /** @file
  *
- * @brief    Thingy application main file.
+ * @brief    Stacon application main file.
  *
- * Source code for the percom demo application based on the Blend template. 
+ * Source code of the percom demo application based on the BLEnd template. 
  */
 #define BLEND_THINGY_SDK
 #include <float.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
-#include "light_control.h"
-#include "sensor.h"
 
 #include "app_button.h"
 #include "app_error.h"
@@ -62,21 +61,23 @@
 #include "ble_hci.h"
 #include "ble_uis.h"
 #include "blend.h"
+#include "context.h"
 #include "drv_ext_gpio.h"
 #include "drv_ext_light.h"
+#include "light_control.h"
 #include "m_batt_meas.h"
 #include "m_ble.h"
 #include "m_ui.h"
 #include "nordic_common.h"
 #include "nrf.h"
 #include "nrf_delay.h"
+#include "nrf_log.h"
+#include "nrf_log_ctrl.h"
 #include "pca20020.h"
+#include "sensor.h"
 #include "softdevice_handler.h"
 #include "support_func.h"
 #include "twi_manager.h"
-#include "context.h"
-#include "nrf_log.h"
-#include "nrf_log_ctrl.h"
 
 //! Value used as error code on stack dump, can be used to identify stack location on stack unwind.
 #define DEAD_BEEF 0xDEADBEEF
@@ -92,6 +93,7 @@
 #define NUM_ENABLED_SENSOR 8
 //! Senisng task id = context type id + TASK_OFFET (Zero for idle)
 #define TASK_OFFSET 1
+#define LOSING_PERIOD 2.5
 
 #define SetBit(A,k) (A |= (1 << (k%NUM_CONTEXT_TYPES)))
 #define ClearBit(A,k) (A &= ~(1 << (k%NUM_CONTEXT_TYPES)))
@@ -111,7 +113,7 @@ blend_data_t m_blend_data;
 
 static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
 
-static const ble_uis_led_t led_colors[5] = {LED_CONFIG_GREEN, LED_CONFIG_PURPLE, LED_CONFIG_BLUE, LED_CONFIG_RED, LED_CONFIG_WHITE};
+static const ble_uis_led_t led_colors[5] = {LED_CONFIG_WHITE, LED_CONFIG_GREEN, LED_CONFIG_PURPLE, LED_CONFIG_BLUE, LED_CONFIG_RED};
 
 uint8_t on_scan_flag  = 0;
 uint8_t discovered = 0;
@@ -139,28 +141,31 @@ node_t* node_lst_head;
 context_t context_pool[NUM_CONTEXT_TYPES];
 /*!< Context type of the current sharing task. Use TASK_OFFSET in beacons (<OFFSET is invalid). */
 uint8_t current_task_type;
-uint8_t task_type_offset;
-
+/*!< Current task result. */
 context_t saved_reading;
 
-void app_error_fault_handler(uint32_t id, uint32_t pc, uint32_t info)
-{
-    #if NRF_LOG_ENABLED
-        error_info_t * err_info = (error_info_t*)info;
-        NRF_LOG_ERROR(" id = %d, pc = %d, file = %s, line number: %d, error code = %d = %s \r\n", \
-        id, pc, nrf_log_push((char*)err_info->p_file_name), err_info->line_num, err_info->err_code, nrf_log_push((char*)nrf_strerror_find(err_info->err_code)));
-    #endif
-    
-    (void)m_ui_led_set_event(M_UI_ERROR);
-    NRF_LOG_FINAL_FLUSH();
-    nrf_delay_ms(5);
-    
-    // On assert, the system can only recover with a reset.
-    #ifndef DEBUG
-        NVIC_SystemReset();
-    #endif
+/*!< Helper function prototypes. */
+node_t* merge_sorted(node_t* lst1, node_t* lst2);
+void front_back_split(node_t* source, node_t** front_ref, node_t** back_ref);
+void mergesort(node_t** head_ref);
 
-    app_error_save_and_stop(id, pc, info);
+void app_error_fault_handler(uint32_t id, uint32_t pc, uint32_t info) {
+#if NRF_LOG_ENABLED
+  error_info_t * err_info = (error_info_t*)info;
+  NRF_LOG_ERROR(" id = %d, pc = %d, file = %s, line number: %d, error code = %d = %s \r\n", \
+		id, pc, nrf_log_push((char*)err_info->p_file_name), err_info->line_num, err_info->err_code, nrf_log_push((char*)nrf_strerror_find(err_info->err_code)));
+#endif
+    
+  (void)m_ui_led_set_event(M_UI_ERROR);
+  NRF_LOG_FINAL_FLUSH();
+  nrf_delay_ms(5);
+    
+  // On assert, the system can only recover with a reset.
+#ifndef DEBUG
+  NVIC_SystemReset();
+#endif
+
+  app_error_save_and_stop(id, pc, info);
 }
 
 /**@brief Function for assert macro callback.
@@ -174,86 +179,86 @@ void app_error_fault_handler(uint32_t id, uint32_t pc, uint32_t info)
  */
 void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
 {
-    app_error_handler(DEAD_BEEF, line_num, p_file_name);
+  app_error_handler(DEAD_BEEF, line_num, p_file_name);
 }
 
 /**@brief Function for placing the application in low power state while waiting for events.
  */
 #define FPU_EXCEPTION_MASK 0x0000009F
-static void power_manage(void)
-{
-    __set_FPSCR(__get_FPSCR()  & ~(FPU_EXCEPTION_MASK));
-    (void) __get_FPSCR();
-    NVIC_ClearPendingIRQ(FPU_IRQn);
+static void power_manage(void) {
+  __set_FPSCR(__get_FPSCR()  & ~(FPU_EXCEPTION_MASK));
+  (void) __get_FPSCR();
+  NVIC_ClearPendingIRQ(FPU_IRQn);
 
-    uint32_t err_code = sd_app_evt_wait();
-    APP_ERROR_CHECK(err_code);
+  uint32_t err_code = sd_app_evt_wait();
+  APP_ERROR_CHECK(err_code);
 }
 
-static void thingy_init(void)
-{
-    uint32_t                 err_code;
-    m_ui_init_t              ui_params;
-    m_ble_init_t             ble_params;
-    batt_meas_init_t         batt_meas_init = BATT_MEAS_PARAM_CFG;
+static void thingy_init(void) {
+  uint32_t                 err_code;
+  m_ui_init_t              ui_params;
+  m_ble_init_t             ble_params;
+  batt_meas_init_t         batt_meas_init = BATT_MEAS_PARAM_CFG;
 
-    /**@brief Initialize the TWI manager. */
-    err_code = twi_manager_init(APP_IRQ_PRIORITY_THREAD);
-    APP_ERROR_CHECK(err_code);
+  /**@brief Initialize the TWI manager. */
+  err_code = twi_manager_init(APP_IRQ_PRIORITY_THREAD);
+  APP_ERROR_CHECK(err_code);
 
-    /**@brief Initialize LED and button UI module. */
-    ui_params.p_twi_instance = &m_twi_sensors;
-    err_code = m_ui_init(&m_ble_service_handles[THINGY_SERVICE_UI],
-                         &ui_params);
-    APP_ERROR_CHECK(err_code);
+  /**@brief Initialize LED and button UI module. */
+  ui_params.p_twi_instance = &m_twi_sensors;
+  err_code = m_ui_init(&m_ble_service_handles[THINGY_SERVICE_UI],
+		       &ui_params);
+  APP_ERROR_CHECK(err_code);
 }
 
-static void board_init(void)
-{
-    uint32_t            err_code;
-    drv_ext_gpio_init_t ext_gpio_init;
+static void board_init(void) {
+  uint32_t            err_code;
+  drv_ext_gpio_init_t ext_gpio_init;
 
-    #if defined(THINGY_HW_v0_7_0)
-        #error   "HW version v0.7.0 not supported."
-    #elif defined(THINGY_HW_v0_8_0)
-        NRF_LOG_WARNING("FW compiled for depricated Thingy HW v0.8.0 \r\n");
-    #elif defined(THINGY_HW_v0_9_0)
-        NRF_LOG_WARNING("FW compiled for depricated Thingy HW v0.9.0 \r\n");
-    #endif
+#if defined(THINGY_HW_v0_7_0)
+#error   "HW version v0.7.0 not supported."
+#elif defined(THINGY_HW_v0_8_0)
+  NRF_LOG_WARNING("FW compiled for depricated Thingy HW v0.8.0 \r\n");
+#elif defined(THINGY_HW_v0_9_0)
+  NRF_LOG_WARNING("FW compiled for depricated Thingy HW v0.9.0 \r\n");
+#endif
 
-    static const nrf_drv_twi_config_t twi_config =
+  static const nrf_drv_twi_config_t twi_config =
     {
-        .scl                = TWI_SCL,
-        .sda                = TWI_SDA,
-        .frequency          = NRF_TWI_FREQ_400K,
-        .interrupt_priority = APP_IRQ_PRIORITY_LOW
+      .scl                = TWI_SCL,
+      .sda                = TWI_SDA,
+      .frequency          = NRF_TWI_FREQ_400K,
+      .interrupt_priority = APP_IRQ_PRIORITY_LOW
     };
 
-    static const drv_sx1509_cfg_t sx1509_cfg =
+  static const drv_sx1509_cfg_t sx1509_cfg =
     {
-        .twi_addr       = SX1509_ADDR,
-        .p_twi_instance = &m_twi_sensors,
-        .p_twi_cfg      = &twi_config
+      .twi_addr       = SX1509_ADDR,
+      .p_twi_instance = &m_twi_sensors,
+      .p_twi_cfg      = &twi_config
     };
 
-    ext_gpio_init.p_cfg = &sx1509_cfg;
+  ext_gpio_init.p_cfg = &sx1509_cfg;
     
-    err_code = support_func_configure_io_startup(&ext_gpio_init);
-    APP_ERROR_CHECK(err_code);
+  err_code = support_func_configure_io_startup(&ext_gpio_init);
+  APP_ERROR_CHECK(err_code);
 
-    nrf_delay_ms(100);
+  nrf_delay_ms(100);
 }
 
 static void timer_init(void)
 {
-    ret_code_t err_code = app_timer_init();
-    APP_ERROR_CHECK(err_code);
+  ret_code_t err_code = app_timer_init();
+  APP_ERROR_CHECK(err_code);
 }
+
+/*!< Unittest prototypes. */
+void unittest_sorting();
 
 static void run_test(){
   ret_code_t err_code;
   blend_sched_start();
- 
+  unittest_sorting();
 }
 
 //! Start inclusive, end exclusive.
@@ -350,13 +355,12 @@ uint32_t update_sensing_task(void) {
   return 0;
 }
 
-/**@brief Query the sensor and update the payload, if current task is valid.
+/**@brief Query the sensor and update the shared context, if current task is valid.
  */
 uint32_t execute_sensing_task(void) {
   if (current_task_type < TASK_OFFSET) {
     return 0;
   }
-  // TODO(liuchg): Fetch the sensor reading and update the payload.
   // JH: The code below is only a testbed for Christine to create the Android code.
   context_sample(current_task_type - TASK_OFFSET);
   saved_reading = context_read(current_task_type - TASK_OFFSET);
@@ -385,13 +389,14 @@ decoded_packet_t decode(uint8_t * bytes) {
     uint16_t ngbr_cap = bytes[3] + (bytes[2] << 8);
     uint16_t ngbr_demand = bytes[5] + (bytes[4] << 8);
     uint8_t ctx_type = bytes[6];
+    bool ctx_valid = (ctx_type >= TASK_OFFSET);
     uint16_t val1 = 0;
     uint16_t val2 = 0;
     val1 = bytes[7] + (bytes[8] << 8) + (bytes[9] << 16) + (bytes[10] << 24);
     //TODO(liuchg): Process the extended field for rich types.
-    uint32_t cur_time = app_timer_cnt_get();
-    context_t cur_context = {ngbr_id, ctx_type, val1, val2, cur_time};
-    decoded_packet_t decoded = {ngbr_id, ngbr_cap, ngbr_demand, cur_context, cur_time};
+    uint32_t cur_time_ms = app_timer_cnt_get();
+    context_t cur_context = {ngbr_id, ctx_type, val1, val2, cur_time_ms};
+    decoded_packet_t decoded = {ngbr_id, ngbr_cap, ngbr_demand, ctx_valid, cur_context, cur_time_ms};
     return decoded;
 }
 
@@ -401,8 +406,8 @@ uint32_t update_neighbor_list(decoded_packet_t* packet) {
   node_t* prev = node_lst_head;
   node_t* cur = prev->next;
   while(cur && cur->node_id != packet->node_id) {
+    prev = cur;
     cur = cur->next;
-    prev = prev->next;
   }
   if (!cur) {
     node_t* append_ngbr = malloc(sizeof(node_t));
@@ -414,8 +419,22 @@ uint32_t update_neighbor_list(decoded_packet_t* packet) {
     prev->next = append_ngbr;
   } else {
     cur->last_sync_ms = packet->timestamp_ms;
+    // TODO(liuchg): Check cap and demand changes if the env. is dynamic
   }
-  //TODO(liuchg): remove lost nodes.
+
+  prev = node_lst_head;
+  cur = prev->next;
+  uint32_t cur_time_ms = app_timer_cnt_get();
+  while(cur) {
+    if (cur->last_sync_ms + LOSING_PERIOD*lambda_ms < cur_time_ms) {
+      prev->next = cur->next;
+      free(cur);
+      cur = prev->next;
+    } else {
+      prev = cur;
+      cur = cur->next;
+    }
+  }
   
   return 0;
 }
@@ -450,7 +469,9 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     }
     decoded_packet_t decoded_packet = decode(p_data);
     update_neighbor_list(&decoded_packet);
-    udpate_context_pool(&decoded_packet);
+    if (decoded_packet.is_ctx_valid){
+      udpate_context_pool(&decoded_packet);
+    }
     // For debug purpose
     char* x = malloc(sizeof(char) * 30);
     context2str(decoded_packet.context, x);
@@ -508,6 +529,8 @@ void sensor_init()
   color_sensor_init(&m_twi_sensors);
 }
 
+
+
 int main(void) {
   uint32_t err_code;
   err_code = NRF_LOG_INIT(NULL);
@@ -544,4 +567,83 @@ int main(void) {
 	  power_manage();
         }
     }
+}
+
+/*!< Implementation of helper functions. */
+void mergesort(node_t** head_ref) {
+  node_t* head = *head_ref;
+  node_t* lst1;
+  node_t* lst2;
+  if ((head == NULL) || head->next == NULL) {
+    return;
+  }
+  front_back_split(head, &lst1, &lst2);
+  mergesort(&lst1);
+  mergesort(&lst2);
+  *head_ref = merge_sorted(lst1, lst2);
+}
+
+node_t* merge_sorted(node_t* lst1, node_t* lst2) {
+  node_t* ret = NULL;
+  if (!lst1) {
+    return lst2;
+  } else if (!lst2) {
+    return lst1;
+  }
+
+  if (lst1->node_id <= lst2->node_id) {
+    ret = lst1;
+    ret->next = merge_sorted(lst1->next, lst2);
+  } else {
+    ret = lst2;
+    ret->next = merge_sorted(lst1, lst2->next);
+  }
+
+  return ret;
+}
+
+void front_back_split(node_t* source, node_t** front_ref, node_t** back_ref) {
+  node_t* slow = source;
+  node_t* fast = source->next;
+  while (fast) {
+    fast = fast->next;
+    if (fast) {
+      slow = slow->next;
+      fast = fast->next;
+    }
+  }
+  // Slow stops before the mid.
+  *front_ref = source;
+  *back_ref = slow->next;
+  slow->next = NULL;
+}
+
+/*!< Section for Unittests . */
+void push(node_t** head_ref, int node_id)
+{
+    node_t* new_node = (node_t*) malloc(sizeof(node_t));
+    new_node->node_id  = node_id;
+    new_node->next = (*head_ref);
+    (*head_ref) = new_node;
+}
+
+void printlist(node_t* node)
+{
+  NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN " ==== PRINT LIST \r\n");
+  while(node != NULL) {
+      NRF_LOG_DEBUG("%d ", node->node_id);
+      node = node->next;
+  }
+  NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN "\n ==== PRINT LIST \r\n");
+}
+
+void unittest_sorting() {
+  push(&node_lst_head, 15);
+  push(&node_lst_head, 8);
+  push(&node_lst_head, 2);
+  push(&node_lst_head, 3);
+  push(&node_lst_head, 11);
+  mergesort(&(node_lst_head->next));
+  printlist(node_lst_head);
+  // Expected: 11, 1, 2, 3, 8, 15
 }
