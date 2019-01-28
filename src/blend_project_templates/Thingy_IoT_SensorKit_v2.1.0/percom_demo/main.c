@@ -68,6 +68,8 @@
 #include "m_batt_meas.h"
 #include "m_ble.h"
 #include "m_ui.h"
+#include "matching.h"
+#include "node.h"
 #include "nordic_common.h"
 #include "nrf.h"
 #include "nrf_delay.h"
@@ -108,8 +110,7 @@ const uint16_t adv_interval_ms = 77;
 //! {protocol_id, node_id, cap_vec, demand_vec, shared_type, value1, value2}.
 uint8_t payload[DATA_LENGTH];
 
-blend_data_t m_blend_data;
-				
+blend_data_t m_blend_data;		
 
 static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
 
@@ -121,22 +122,10 @@ bool discover_mode = true;
 
 static const nrf_drv_twi_t m_twi_sensors = NRF_DRV_TWI_INSTANCE(TWI_SENSOR_INSTANCE);
 
-/*! \brief Structure for a list of nodes.
- *
- *  Head will be the node itself.
- */
-typedef struct node {
-  uint8_t node_id; /*!< Id of the discovered node. */
-  uint16_t cap_vec; /*!< Bit vector for sensing capabilities. */
-  uint16_t demand_vec; /*!< Bit vector for context demand. */
-  uint32_t last_sync_ms; /*!< Time of last sync in microseconds */
-  struct node *next;
-} node_t;
-
-
-
 /*!< List of nodes in the neighborhood; head is the local node. */
 node_t* node_lst_head;
+/*!< Snapshot of the neighborhood. */
+node_t* snapshot;
 /*!< Container for the context values shared and received in the neighborhood(indexed by context type). */
 context_t context_pool[NUM_CONTEXT_TYPES];
 /*!< Context type of the current sharing task. Use TASK_OFFSET in beacons (<OFFSET is invalid). */
@@ -144,11 +133,23 @@ uint8_t current_task_type;
 /*!< Current task result. */
 context_t saved_reading;
 
+/* === Section (Function Prototypes) === */
+
+/*!< AfterScan as in Stacon */
+bool compare_snapshots(void);
+void take_snapshot(void);
+
 /*!< Helper function prototypes. */
 node_t* merge_sorted(node_t* lst1, node_t* lst2);
 void front_back_split(node_t* source, node_t** front_ref, node_t** back_ref);
 void mergesort(node_t** head_ref);
 
+/*!< Unit test prototypes. */
+void unittest_sorting();
+
+/* === End of Section (Function Prototypes) === */
+
+/* === Section (Board Functions) === */
 void app_error_fault_handler(uint32_t id, uint32_t pc, uint32_t info) {
 #if NRF_LOG_ENABLED
   error_info_t * err_info = (error_info_t*)info;
@@ -252,9 +253,6 @@ static void timer_init(void)
   APP_ERROR_CHECK(err_code);
 }
 
-/*!< Unittest prototypes. */
-void unittest_sorting();
-
 static void run_test(){
   ret_code_t err_code;
   blend_sched_start();
@@ -345,8 +343,11 @@ uint32_t middleware_init(void) {
  * Reselect the sensing task based on the current neighborhood. Output to global variable current_task_type.
  */
 uint32_t update_sensing_task(void) {
-  // TODO(liuchg): Implement selection algorithm here.
-  current_task_type = rng_rand(1, 3);
+  if (compare_snapshots()) {
+    return 0;
+  }
+  take_snapshot();
+  current_task_type = get_new_assignment(snapshot);
   if (current_task_type >= TASK_OFFSET) {
     NRF_LOG_DEBUG("Context task selected: %d.\r\n", current_task_type - TASK_OFFSET);
   } else {
@@ -528,7 +529,7 @@ void sensor_init()
   pressure_sensor_init(&m_twi_sensors);
   color_sensor_init(&m_twi_sensors);
 }
-
+/* === End of Section (Board Functions) === */
 
 
 int main(void) {
@@ -569,7 +570,71 @@ int main(void) {
     }
 }
 
-/*!< Implementation of helper functions. */
+/* === Section (Function Prototype Implementation) === */
+
+/**@brief Comparing the current neighborhood status with the snapshot.
+ *
+ * @return Whether the state is the same.
+ */
+bool compare_snapshots(void) {
+  if (!node_lst_head || !snapshot) {
+    return false;
+  }
+  mergesort(&(node_lst_head->next));
+  node_t* cur_it = node_lst_head;
+  node_t* snap_it = snapshot;
+  while(cur_it || snap_it) {
+    if (!cur_it || !snap_it) {
+      return false;
+    }
+    if (!(cur_it->node_id == snap_it->node_id && cur_it->cap_vec == snap_it->cap_vec && cur_it->demand_vec == snap_it->demand_vec)) {
+      return false;
+    }
+    if (cur_it) {
+      cur_it = cur_it->next;
+    }
+    if (snap_it) {
+      snap_it = snap_it->next;
+    }
+  }
+  return true;
+}
+
+/**@brief Take a snapshot of the current neighborhood.
+ *
+ * @return None.
+ */
+void take_snapshot(void) {
+  node_t* it = snapshot;
+  while(snapshot) {
+    it = snapshot;
+    snapshot = snapshot->next;
+    free(it);
+  }
+  it = node_lst_head;
+  if (it) {
+    node_t* snapshot_head;
+    node_t* prev;
+    while (it) {
+      node_t* elmt = (node_t*) malloc(sizeof(node_t));
+      elmt->node_id = it->node_id;
+      elmt->cap_vec = it->cap_vec;
+      elmt->demand_vec = it->demand_vec;
+      elmt->next = NULL;
+      if (!snapshot_head) {
+	snapshot_head = elmt;
+	prev = elmt;
+      } else {
+	prev->next = elmt;
+	prev = elmt;
+      }
+      it = it->next;
+    }
+  } else {
+    NRF_LOG_ERROR("node_lst_head is empty.");    
+  }
+}
+
 void mergesort(node_t** head_ref) {
   node_t* head = *head_ref;
   node_t* lst1;
@@ -618,7 +683,10 @@ void front_back_split(node_t* source, node_t** front_ref, node_t** back_ref) {
   slow->next = NULL;
 }
 
-/*!< Section for Unittests . */
+/* === End of Section (Function Prototype Implementation) === */
+
+/* === Section (Tests) === */
+
 void push(node_t** head_ref, int node_id)
 {
     node_t* new_node = (node_t*) malloc(sizeof(node_t));
@@ -647,3 +715,4 @@ void unittest_sorting() {
   printlist(node_lst_head);
   // Expected: 11, 1, 2, 3, 8, 15
 }
+/* === End of Section (Tests) === */
