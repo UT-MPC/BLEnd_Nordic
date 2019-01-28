@@ -93,14 +93,7 @@
 #define MAX_DEVICE 10
 #define DATA_LENGTH 15
 #define NUM_ENABLED_SENSOR 8
-//! Senisng task id = context type id + TASK_OFFET (Zero for idle)
-#define TASK_OFFSET 1
 #define LOSING_PERIOD 2.5
-
-#define SetBit(A,k) (A |= (1 << (k%NUM_CONTEXT_TYPES)))
-#define ClearBit(A,k) (A &= ~(1 << (k%NUM_CONTEXT_TYPES)))
-#define TestBit(A,k) (A & (1 << (k%NUM_CONTEXT_TYPES)))
-// Extend to larger range using an array: (A[(k/NUM_CONTEXT_TYPES)] |= (1 << (k%NUM_CONTEXT_TYPES)))
 
 //! BLEnd parameters {Epoch, Adv. interval, mode}.
 const uint16_t lambda_ms = 2000;
@@ -122,8 +115,10 @@ bool discover_mode = true;
 
 static const nrf_drv_twi_t m_twi_sensors = NRF_DRV_TWI_INSTANCE(TWI_SENSOR_INSTANCE);
 
-/*!< List of nodes in the neighborhood; head is the local node. */
+/*!< List of nodes in the neighborhood(self-exclusive). */
 node_t* node_lst_head;
+/*!< Local node. */
+node_t* localhost;
 /*!< Snapshot of the neighborhood. */
 node_t* snapshot;
 /*!< Container for the context values shared and received in the neighborhood(indexed by context type). */
@@ -137,7 +132,7 @@ context_t saved_reading;
 
 /*!< AfterScan as in Stacon */
 bool compare_snapshots(void);
-void take_snapshot(void);
+uint8_t take_snapshot(void);
 
 /*!< Helper function prototypes. */
 node_t* merge_sorted(node_t* lst1, node_t* lst2);
@@ -321,16 +316,16 @@ uint32_t update_payload(context_t context_in, uint8_t* payload) {
 /**@brief Initialize the node's sensing equipment and tasks.
 */
 uint32_t middleware_init(void) {
-  node_t* host = malloc(sizeof(node_t));
-  host->node_id = DEVICE_ID;
+  localhost = malloc(sizeof(node_t));
+  localhost->node_id = DEVICE_ID;
   // TODO(liuchg): randomized init. for capabilities.
-  host->cap_vec = 0;
-  SetBit(host->cap_vec, 1);
-  SetBit(host->cap_vec, 2);
-  host->demand_vec = 0xFFFF;
-  host->next = NULL;
+  localhost->cap_vec = 0;
+  SetBit(localhost->cap_vec, 1);
+  SetBit(localhost->cap_vec, 2);
+  localhost->demand_vec = 0xFFFF;
+  localhost->next = NULL;
 
-  node_lst_head = host;
+  node_lst_head = localhost;
 
   // Randomly assign a capapble task.
   current_task_type = rng_rand(0, 2) + TASK_OFFSET;
@@ -346,9 +341,9 @@ uint32_t update_sensing_task(void) {
   if (compare_snapshots()) {
     return 0;
   }
-  take_snapshot();
-  current_task_type = get_new_assignment(snapshot);
-  if (current_task_type >= TASK_OFFSET) {
+  uint8_t l_id = take_snapshot();
+  current_task_type = get_new_assignment(snapshot, l_id);
+  if (current_task_type >= TASK_OFFSET && TestBit(localhost->cap_vec, current_task_type - TASK_OFFSET)) {
     NRF_LOG_DEBUG("Context task selected: %d.\r\n", current_task_type - TASK_OFFSET);
   } else {
     NRF_LOG_DEBUG("Context task selected: Idle.\r\n");
@@ -580,10 +575,13 @@ bool compare_snapshots(void) {
   if (!node_lst_head || !snapshot) {
     return false;
   }
-  mergesort(&(node_lst_head->next));
   node_t* cur_it = node_lst_head;
   node_t* snap_it = snapshot;
   while(cur_it || snap_it) {
+    if (snap_it && snap_it->node_id == localhost->node_id) {
+      snap_it = snap_it->next;
+      continue;
+    }
     if (!cur_it || !snap_it) {
       return false;
     }
@@ -602,9 +600,9 @@ bool compare_snapshots(void) {
 
 /**@brief Take a snapshot of the current neighborhood.
  *
- * @return None.
+ * @return Index of localhost.
  */
-void take_snapshot(void) {
+uint8_t take_snapshot(void) {
   node_t* it = snapshot;
   while(snapshot) {
     it = snapshot;
@@ -612,26 +610,38 @@ void take_snapshot(void) {
     free(it);
   }
   it = node_lst_head;
+  mergesort(&(node_lst_head));
   if (it) {
-    node_t* snapshot_head;
-    node_t* prev;
+    snapshot = (node_t*) malloc(sizeof(node_t));
+    snapshot->node_id = localhost->node_id;
+    snapshot->cap_vec = localhost->cap_vec;
+    snapshot->demand_vec = localhost->demand_vec;
+    snapshot->next = NULL;
+    node_t* s_it = snapshot->next;
+    node_t* prev = snapshot;
     while (it) {
-      node_t* elmt = (node_t*) malloc(sizeof(node_t));
-      elmt->node_id = it->node_id;
-      elmt->cap_vec = it->cap_vec;
-      elmt->demand_vec = it->demand_vec;
-      elmt->next = NULL;
-      if (!snapshot_head) {
-	snapshot_head = elmt;
-	prev = elmt;
-      } else {
-	prev->next = elmt;
-	prev = elmt;
-      }
+      node_t* s_it = (node_t*) malloc(sizeof(node_t));
+      s_it->node_id = it->node_id;
+      s_it->cap_vec = it->cap_vec;
+      s_it->demand_vec = it->demand_vec;
+      s_it->next = NULL;
+      prev->next = s_it;
+      prev = s_it;
       it = it->next;
     }
+
+    mergesort(&(snapshot));
+
+    it = snapshot;
+    uint8_t l_id = 0;
+    while(it && (it->node_id != localhost->node_id)) {
+      ++l_id;
+      it = it->next;
+    }
+    return l_id;
   } else {
-    NRF_LOG_ERROR("node_lst_head is empty.");    
+    NRF_LOG_ERROR("node_lst_head is empty.");
+    return 0xff;
   }
 }
 
