@@ -290,19 +290,24 @@ uint32_t update_payload(context_t context_in, uint8_t* payload) {
   //uint8_t sharing_type, uint32_t ctx_val1, uint32_t ctx_val2, uint8_t* payload
   payload[0] = PROTOCOL_ID;
   payload[1] = DEVICE_ID;
-  payload[2] = (node_lst_head->cap_vec >> 8); // Big endian
-  payload[3] = node_lst_head->cap_vec & 0xFF;
-  payload[4] = (node_lst_head->demand_vec >> 8);
-  payload[5] = node_lst_head->demand_vec & 0xFF;
-  payload[6] = context_in.ctx_type;
-  uint8_t* vp = (uint8_t*) &(context_in.value1);
-  for (int i = 0; i < 4; ++i) {
-    payload[7+i] = vp[i];
+  payload[2] = (localhost->cap_vec >> 8); // Big endian
+  payload[3] = localhost->cap_vec & 0xFF;
+  payload[4] = (localhost->demand_vec >> 8);
+  payload[5] = localhost->demand_vec & 0xFF;
+  if (current_task_type >= TASK_OFFSET) {
+    payload[6] = context_in.ctx_type;
+    uint8_t* vp = (uint8_t*) &(context_in.value1);
+    for (int i = 0; i < 4; ++i) {
+      payload[7+i] = vp[i];
+    }
+    vp = (uint8_t*) &(context_in.value2);
+    for (int i = 0; i < 4; ++i) {
+      payload[11+i] = vp[i];
+    }
+  } else {
+    memset(&payload[6], 0, 9*sizeof(uint8_t));
   }
-  vp = (uint8_t*) &(context_in.value2);
-  for (int i = 0; i < 4; ++i) {
-    payload[11+i] = vp[i];
-  }
+
 
   m_blend_data.data_length = DATA_LENGTH;
   m_blend_data.data = payload;
@@ -399,39 +404,49 @@ decoded_packet_t decode(uint8_t * bytes) {
 /**@brief Update the neighbor list from received packet.
 */
 uint32_t update_neighbor_list(decoded_packet_t* packet) {
-  node_t* prev = node_lst_head;
-  node_t* cur = prev->next;
+  node_t* cur = node_lst_head;
+  node_t* prev = NULL;
   while(cur && cur->node_id != packet->node_id) {
     prev = cur;
     cur = cur->next;
   }
-  if (!cur) {
+  if(!cur) {
     node_t* append_ngbr = malloc(sizeof(node_t));
     append_ngbr->node_id = packet->node_id;
     append_ngbr->cap_vec = packet->cap_vec;
     append_ngbr->demand_vec = packet->demand_vec;
     append_ngbr->last_sync_ms = packet->timestamp_ms;
     append_ngbr->next = NULL;
-    prev->next = append_ngbr;
+    if (prev) {
+      prev->next = append_ngbr;
+    } else {
+      node_lst_head = append_ngbr;
+    }
   } else {
     cur->last_sync_ms = packet->timestamp_ms;
     // TODO(liuchg): Check cap and demand changes if the env. is dynamic
   }
 
-  prev = node_lst_head;
-  cur = prev->next;
+  cur = node_lst_head;
+  prev = NULL;
   uint32_t cur_time_ms = app_timer_cnt_get();
   while(cur) {
     if (cur->last_sync_ms + LOSING_PERIOD*lambda_ms < cur_time_ms) {
-      prev->next = cur->next;
-      free(cur);
-      cur = prev->next;
+      if (prev) {
+	prev->next = cur->next;
+	free(cur);
+	cur = prev->next;
+      } else {
+	node_lst_head = cur->next;
+	free(cur);
+	cur = node_lst_head;
+      }
     } else {
       prev = cur;
       cur = cur->next;
     }
   }
-  
+
   return 0;
 }
 
@@ -572,9 +587,6 @@ int main(void) {
  * @return Whether the state is the same.
  */
 bool compare_snapshots(void) {
-  if (!node_lst_head || !snapshot) {
-    return false;
-  }
   node_t* cur_it = node_lst_head;
   node_t* snap_it = snapshot;
   while(cur_it || snap_it) {
@@ -609,39 +621,44 @@ uint8_t take_snapshot(void) {
     snapshot = snapshot->next;
     free(it);
   }
-  it = node_lst_head;
-  mergesort(&(node_lst_head));
-  if (it) {
-    snapshot = (node_t*) malloc(sizeof(node_t));
-    snapshot->node_id = localhost->node_id;
-    snapshot->cap_vec = localhost->cap_vec;
-    snapshot->demand_vec = localhost->demand_vec;
-    snapshot->next = NULL;
-    node_t* s_it = snapshot->next;
-    node_t* prev = snapshot;
-    while (it) {
-      node_t* s_it = (node_t*) malloc(sizeof(node_t));
-      s_it->node_id = it->node_id;
-      s_it->cap_vec = it->cap_vec;
-      s_it->demand_vec = it->demand_vec;
-      s_it->next = NULL;
-      prev->next = s_it;
-      prev = s_it;
+  uint8_t l_id = 0;
+  if (node_lst_head) {
+    mergesort(&(node_lst_head));
+    it = node_lst_head;
+    node_t* s_prev;
+    while(it) {
+      node_t* elmt = (node_t*)malloc(sizeof(node_t));
+      elmt->node_id = it->node_id;
+      if (elmt->node_id < localhost->node_id) {
+	++l_id;
+      }
+      elmt->cap_vec = it->cap_vec;
+      elmt->demand_vec = it->demand_vec;
+      elmt->next = NULL;
+      if (!snapshot) {
+	snapshot = elmt;
+      } else {
+	s_prev->next = elmt;
+      }
+      s_prev = elmt;
       it = it->next;
     }
-
-    mergesort(&(snapshot));
-
-    it = snapshot;
-    uint8_t l_id = 0;
-    while(it && (it->node_id != localhost->node_id)) {
-      ++l_id;
-      it = it->next;
-    }
-    return l_id;
+  }
+  // Insert localhost
+  node_t* copy_loc = (node_t*)malloc(sizeof(node_t));
+  copy_loc->node_id = localhost->node_id;
+  copy_loc->cap_vec = localhost->cap_vec;
+  copy_loc->demand_vec = localhost->demand_vec;
+  if (l_id == 0) {
+    copy_loc->next = snapshot;
+    snapshot = copy_loc;
   } else {
-    NRF_LOG_ERROR("node_lst_head is empty.");
-    return 0xff;
+    it = snapshot;
+    for (int i = l_id - 1; i > 0; --i) {
+      it = it->next;
+    }
+    copy_loc->next = it->next;
+    it->next = copy_loc;
   }
 }
 
