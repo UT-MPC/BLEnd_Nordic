@@ -92,7 +92,7 @@
 #define DEVICE_ID 0x00
 #define MAX_DEVICE 10
 #define DATA_LENGTH 15
-#define NUM_ENABLED_SENSOR 8
+#define NUM_ENABLED_SENSOR 3
 #define LOSING_PERIOD 2.5
 
 //! BLEnd parameters {Epoch, Adv. interval, mode}.
@@ -252,7 +252,7 @@ static void timer_init(void)
 static void run_test(){
   ret_code_t err_code;
   blend_sched_start();
-  unittest_sorting();
+  //unittest_sorting();
 }
 
 //! Start inclusive, end exclusive.
@@ -331,10 +331,11 @@ uint32_t middleware_init(void) {
   localhost->demand_vec = 0xFFFF;
   localhost->next = NULL;
 
-  node_lst_head = localhost;
+  //node_lst_head = localhost;
 
   // Randomly assign a capapble task.
   current_task_type = rng_rand(0, 2) + TASK_OFFSET;
+  prev_task_type = 0xff;
   
   return 0;
 }
@@ -344,15 +345,16 @@ uint32_t middleware_init(void) {
  * Reselect the sensing task based on the current neighborhood. Output to global variable current_task_type.
  */
 uint32_t update_sensing_task(void) {
-  if (compare_snapshots()) {
+  if (snapshot && compare_snapshots()) {
     return 0;
   }
   uint8_t l_id = take_snapshot();
   current_task_type = get_new_assignment(snapshot, l_id);
-  if (current_task_type >= TASK_OFFSET && TestBit(localhost->cap_vec, current_task_type - TASK_OFFSET)) {
+  if (current_task_type >= TASK_OFFSET && (current_task_type - TASK_OFFSET) <= NUM_ENABLED_SENSOR && TestBit(localhost->cap_vec, current_task_type - TASK_OFFSET)) {
     NRF_LOG_DEBUG("Context task selected: %d.\r\n", current_task_type - TASK_OFFSET);
   } else {
-    NRF_LOG_DEBUG("Context task selected: Idle.\r\n");
+    NRF_LOG_DEBUG("Context task selected: Idle (%d, l_id:%d).\r\n", current_task_type, l_id);
+    current_task_type = TASK_IDLE;
   }
   return 0;
 }
@@ -375,13 +377,13 @@ uint32_t update_light(void) {
   if (current_task_type == prev_task_type) {
     return 0;
   }
-  if (current_task_type - TASK_OFFSET >= 5) { // TODO(liuchg): enable real checking below.
+  if (current_task_type - TASK_OFFSET > NUM_ENABLED_SENSOR) { // TODO(liuchg): enable real checking below.
   //  if (current_task_type - TASK_OFFSET >= NUM_SENSOR_TYPE) {
     NRF_LOG_ERROR("Update light error (task context type out of range.)");
     return 1;
   }
   
-  ret_code_t err_code = led_set(&led_colors[current_task_type - TASK_OFFSET],NULL);
+  ret_code_t err_code = led_set(&led_colors[current_task_type],NULL);
   APP_ERROR_CHECK(err_code);
   prev_task_type = current_task_type;
   return 0;
@@ -406,33 +408,40 @@ decoded_packet_t decode(uint8_t * bytes) {
 }
 
 /**@brief Update the neighbor list from received packet.
+ *
+ * @details Passing nullptr if the purpose is to clean up lost nodes.
+ *
+ * @param[in] packet Received packet from radio frame.
 */
 uint32_t update_neighbor_list(decoded_packet_t* packet) {
   node_t* cur = node_lst_head;
   node_t* prev = NULL;
-  while(cur && cur->node_id != packet->node_id) {
-    prev = cur;
-    cur = cur->next;
-  }
-  if(!cur) {
-    node_t* append_ngbr = malloc(sizeof(node_t));
-    append_ngbr->node_id = packet->node_id;
-    append_ngbr->cap_vec = packet->cap_vec;
-    append_ngbr->demand_vec = packet->demand_vec;
-    append_ngbr->last_sync_ms = packet->timestamp_ms;
-    append_ngbr->next = NULL;
-    if (prev) {
-      prev->next = append_ngbr;
-    } else {
-      node_lst_head = append_ngbr;
+  
+  if (packet) {
+    while(cur && cur->node_id != packet->node_id) {
+      prev = cur;
+      cur = cur->next;
     }
-  } else {
-    cur->last_sync_ms = packet->timestamp_ms;
-    // TODO(liuchg): Check cap and demand changes if the env. is dynamic
+    if(!cur) {
+      node_t* append_ngbr = malloc(sizeof(node_t));
+      append_ngbr->node_id = packet->node_id;
+      append_ngbr->cap_vec = packet->cap_vec;
+      append_ngbr->demand_vec = packet->demand_vec;
+      append_ngbr->last_sync_ms = packet->timestamp_ms;
+      append_ngbr->next = NULL;
+      if (prev) {
+	prev->next = append_ngbr;
+      } else {
+	node_lst_head = append_ngbr;
+      }
+    } else {
+      cur->last_sync_ms = packet->timestamp_ms;
+      // TODO(liuchg): Check cap and demand changes if the env. is dynamic
+    }
+    cur = node_lst_head;
+    prev = NULL;
   }
 
-  cur = node_lst_head;
-  prev = NULL;
   uint32_t cur_time_ms = app_timer_cnt_get();
   while(cur) {
     if (cur->last_sync_ms + LOSING_PERIOD*lambda_ms < cur_time_ms) {
@@ -490,7 +499,7 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     // For debug purpose
     char* x = malloc(sizeof(char) * 30);
     context2str(decoded_packet.context, x);
-    NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN "Read context: %s from node %d\r\n", (uint32_t)x, decoded_packet.context.source_id);
+    NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN "Read context: %s from node %d (cap:%d).\r\n", (uint32_t)x, decoded_packet.context.source_id, decoded_packet.cap_vec);
     free(x);
     break;
     }
@@ -498,6 +507,7 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     break;
   }
   case BLEND_EVT_AFTER_SCAN: {
+    update_neighbor_list(NULL);
 
     // JH: sample code for sample, read, and to_string the context type.
     /* context_sample(TEMP_CTX); */
