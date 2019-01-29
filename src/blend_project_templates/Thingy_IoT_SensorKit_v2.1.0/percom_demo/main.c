@@ -89,7 +89,7 @@
 #define SCHED_QUEUE_SIZE 60
 
 #define PROTOCOL_ID 0x8B
-#define DEVICE_ID 0x01
+#define DEVICE_ID 0x00
 #define MAX_DEVICE 10
 #define DATA_LENGTH 15
 #define NUM_ENABLED_SENSOR 8
@@ -125,6 +125,7 @@ node_t* snapshot;
 context_t context_pool[NUM_CONTEXT_TYPES];
 /*!< Context type of the current sharing task. Use TASK_OFFSET in beacons (<OFFSET is invalid). */
 uint8_t current_task_type;
+uint8_t prev_task_type;
 /*!< Current task result. */
 context_t saved_reading;
 
@@ -371,15 +372,18 @@ uint32_t execute_sensing_task(void) {
 /**@brief Context type visualization using the lightwell.
 */
 uint32_t update_light(void) {
+  if (current_task_type == prev_task_type) {
+    return 0;
+  }
   if (current_task_type - TASK_OFFSET >= 5) { // TODO(liuchg): enable real checking below.
   //  if (current_task_type - TASK_OFFSET >= NUM_SENSOR_TYPE) {
     NRF_LOG_ERROR("Update light error (task context type out of range.)");
     return 1;
   }
   
-  ret_code_t err_code = led_set(&led_colors[current_task_type],NULL);
-  //ret_code_t err_code = led_set(&led_colors[2],NULL);
+  ret_code_t err_code = led_set(&led_colors[current_task_type - TASK_OFFSET],NULL);
   APP_ERROR_CHECK(err_code);
+  prev_task_type = current_task_type;
   return 0;
 }
 
@@ -660,6 +664,7 @@ uint8_t take_snapshot(void) {
     copy_loc->next = it->next;
     it->next = copy_loc;
   }
+  return l_id;
 }
 
 void mergesort(node_t** head_ref) {

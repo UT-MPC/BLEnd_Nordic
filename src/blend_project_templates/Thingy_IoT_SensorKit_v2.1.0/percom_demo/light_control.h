@@ -56,7 +56,7 @@
 
 #define LED_CONFIG_WHITE				\
   {						\
-    .mode = BLE_UIS_LED_MODE_CONST,		\
+    .mode = BLE_UIS_LED_MODE_BREATHE,		\
       .data =					\
       {						\
         .mode_const =				\
