@@ -36,7 +36,7 @@ void m_humidity2str(void* humid_p, char* str){
 
 void m_pressure2str(void* pressure_p, char* str){
   pressure_t pressure_in = *((pressure_t*)pressure_p);
-  sprintf(str, "Pressure: %d.%d hPa\r\n", pressure_in.integer, pressure_in.decimal);
+  sprintf(str, "Pressure: %ld.%d hPa\r\n", pressure_in.integer, pressure_in.decimal);
 }
 
 void m_color2str(void* color_p, char* str){

@@ -73,6 +73,7 @@
 #include "nordic_common.h"
 #include "nrf.h"
 #include "nrf_delay.h"
+#include "nrf_drv_rng.h"
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
 #include "pca20020.h"
@@ -638,7 +639,7 @@ uint8_t take_snapshot(void) {
   if (node_lst_head) {
     mergesort(&(node_lst_head));
     it = node_lst_head;
-    node_t* s_prev;
+    node_t* s_prev = NULL;
     while(it) {
       node_t* elmt = (node_t*)malloc(sizeof(node_t));
       elmt->node_id = it->node_id;
