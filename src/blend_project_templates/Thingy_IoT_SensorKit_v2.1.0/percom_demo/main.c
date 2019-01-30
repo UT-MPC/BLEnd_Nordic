@@ -38,16 +38,15 @@
 
 /** @file
  *
- * @brief    Thingy application main file.
+ * @brief    Stacon application main file.
  *
- * Source code for the percom demo application based on the Blend template. 
+ * Source code of the percom demo application based on the BLEnd template. 
  */
 #define BLEND_THINGY_SDK
 #include <float.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
-#include "light_control.h"
-#include "sensor.h"
 
 #include "app_button.h"
 #include "app_error.h"
@@ -62,21 +61,25 @@
 #include "ble_hci.h"
 #include "ble_uis.h"
 #include "blend.h"
+#include "context.h"
 #include "drv_ext_gpio.h"
 #include "drv_ext_light.h"
+#include "light_control.h"
 #include "m_batt_meas.h"
 #include "m_ble.h"
 #include "m_ui.h"
+#include "matching.h"
+#include "node.h"
 #include "nordic_common.h"
 #include "nrf.h"
 #include "nrf_delay.h"
+#include "nrf_log.h"
+#include "nrf_log_ctrl.h"
 #include "pca20020.h"
+#include "sensor.h"
 #include "softdevice_handler.h"
 #include "support_func.h"
 #include "twi_manager.h"
-#include "context.h"
-#include "nrf_log.h"
-#include "nrf_log_ctrl.h"
 
 //! Value used as error code on stack dump, can be used to identify stack location on stack unwind.
 #define DEAD_BEEF 0xDEADBEEF
@@ -86,16 +89,11 @@
 #define SCHED_QUEUE_SIZE 60
 
 #define PROTOCOL_ID 0x8B
-#define DEVICE_ID 0x01
+#define DEVICE_ID 0x00
 #define MAX_DEVICE 10
 #define DATA_LENGTH 15
-#define NUM_ENABLED_SENSOR 8
-#define TASK_IDLE 0
-
-#define SetBit(A,k) (A |= (1 << (k%NUM_CONTEXT_TYPES)))
-#define ClearBit(A,k) (A &= ~(1 << (k%NUM_CONTEXT_TYPES)))
-#define TestBit(A,k) (A & (1 << (k%NUM_CONTEXT_TYPES)))
-// Extend to larger range using an array: (A[(k/NUM_CONTEXT_TYPES)] |= (1 << (k%NUM_CONTEXT_TYPES)))
+#define NUM_ENABLED_SENSOR 3
+#define LOSING_PERIOD 2.5
 
 //! BLEnd parameters {Epoch, Adv. interval, mode}.
 const uint16_t lambda_ms = 2000;
@@ -105,19 +103,11 @@ const uint16_t adv_interval_ms = 77;
 //! {protocol_id, node_id, cap_vec, demand_vec, shared_type, value1, value2}.
 uint8_t payload[DATA_LENGTH];
 
-blend_data_t m_blend_data;
-				
-uint32_t start_tick = 0;
-static uint32_t epoch_count = 0;
+blend_data_t m_blend_data;		
 
 static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
 
-uint8_t found_device[MAX_DEVICE];
-
-static const ble_uis_led_t m_led_scan = LED_CONFIG_PURPLE;
-static const ble_uis_led_t m_led_adv = LED_CONFIG_GREEN;
-
-static const ble_uis_led_t led_colors[5] = {LED_CONFIG_RED, LED_CONFIG_PURPLE, LED_CONFIG_BLUE, LED_CONFIG_GREEN, LED_CONFIG_WHITE};
+static const ble_uis_led_t led_colors[5] = {LED_CONFIG_WHITE, LED_CONFIG_GREEN, LED_CONFIG_PURPLE, LED_CONFIG_BLUE, LED_CONFIG_RED};
 
 uint8_t on_scan_flag  = 0;
 uint8_t discovered = 0;
@@ -125,46 +115,54 @@ bool discover_mode = true;
 
 static const nrf_drv_twi_t m_twi_sensors = NRF_DRV_TWI_INSTANCE(TWI_SENSOR_INSTANCE);
 
-/*! \brief Structure for a list of nodes.
- *
- *  Head will be the node itself.
- */
-typedef struct node {
-  uint8_t node_id; /*!< Id of the discovered node. */
-  uint16_t cap_vec; /*!< Bit vector for sensing capabilities. */
-  uint16_t demand_vec; /*!< Bit vector for context demand. */
-  uint32_t last_sync_ms; /*!< Time of last sync in microseconds */
-  struct node *next;
-} node_t;
-
-
-
-/*!< List of nodes in the neighborhood; head is the local node. */
+/*!< List of nodes in the neighborhood(self-exclusive). */
 node_t* node_lst_head;
+/*!< Local node. */
+node_t* localhost;
+/*!< Snapshot of the neighborhood. */
+node_t* snapshot;
 /*!< Container for the context values shared and received in the neighborhood(indexed by context type). */
 context_t context_pool[NUM_CONTEXT_TYPES];
-/*!< Context type of the current sharing task. TASK_IDLE (i.e. 0) for invalid. */
+/*!< Context type of the current sharing task. Use TASK_OFFSET in beacons (<OFFSET is invalid). */
 uint8_t current_task_type;
+uint8_t prev_task_type;
+/*!< Current task result. */
+context_t saved_reading;
 
+/* === Section (Function Prototypes) === */
 
-void app_error_fault_handler(uint32_t id, uint32_t pc, uint32_t info)
-{
-    #if NRF_LOG_ENABLED
-        error_info_t * err_info = (error_info_t*)info;
-        NRF_LOG_ERROR(" id = %d, pc = %d, file = %s, line number: %d, error code = %d = %s \r\n", \
-        id, pc, nrf_log_push((char*)err_info->p_file_name), err_info->line_num, err_info->err_code, nrf_log_push((char*)nrf_strerror_find(err_info->err_code)));
-    #endif
+/*!< AfterScan as in Stacon */
+bool compare_snapshots(void);
+uint8_t take_snapshot(void);
+
+/*!< Helper function prototypes. */
+node_t* merge_sorted(node_t* lst1, node_t* lst2);
+void front_back_split(node_t* source, node_t** front_ref, node_t** back_ref);
+void mergesort(node_t** head_ref);
+
+/*!< Unit test prototypes. */
+void unittest_sorting();
+
+/* === End of Section (Function Prototypes) === */
+
+/* === Section (Board Functions) === */
+void app_error_fault_handler(uint32_t id, uint32_t pc, uint32_t info) {
+#if NRF_LOG_ENABLED
+  error_info_t * err_info = (error_info_t*)info;
+  NRF_LOG_ERROR(" id = %d, pc = %d, file = %s, line number: %d, error code = %d = %s \r\n", \
+		id, pc, nrf_log_push((char*)err_info->p_file_name), err_info->line_num, err_info->err_code, nrf_log_push((char*)nrf_strerror_find(err_info->err_code)));
+#endif
     
-    (void)m_ui_led_set_event(M_UI_ERROR);
-    NRF_LOG_FINAL_FLUSH();
-    nrf_delay_ms(5);
+  (void)m_ui_led_set_event(M_UI_ERROR);
+  NRF_LOG_FINAL_FLUSH();
+  nrf_delay_ms(5);
     
-    // On assert, the system can only recover with a reset.
-    #ifndef DEBUG
-        NVIC_SystemReset();
-    #endif
+  // On assert, the system can only recover with a reset.
+#ifndef DEBUG
+  NVIC_SystemReset();
+#endif
 
-    app_error_save_and_stop(id, pc, info);
+  app_error_save_and_stop(id, pc, info);
 }
 
 /**@brief Function for assert macro callback.
@@ -178,88 +176,83 @@ void app_error_fault_handler(uint32_t id, uint32_t pc, uint32_t info)
  */
 void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
 {
-    app_error_handler(DEAD_BEEF, line_num, p_file_name);
+  app_error_handler(DEAD_BEEF, line_num, p_file_name);
 }
 
 /**@brief Function for placing the application in low power state while waiting for events.
  */
 #define FPU_EXCEPTION_MASK 0x0000009F
-static void power_manage(void)
-{
-    __set_FPSCR(__get_FPSCR()  & ~(FPU_EXCEPTION_MASK));
-    (void) __get_FPSCR();
-    NVIC_ClearPendingIRQ(FPU_IRQn);
+static void power_manage(void) {
+  __set_FPSCR(__get_FPSCR()  & ~(FPU_EXCEPTION_MASK));
+  (void) __get_FPSCR();
+  NVIC_ClearPendingIRQ(FPU_IRQn);
 
-    uint32_t err_code = sd_app_evt_wait();
-    APP_ERROR_CHECK(err_code);
+  uint32_t err_code = sd_app_evt_wait();
+  APP_ERROR_CHECK(err_code);
 }
 
-static void thingy_init(void)
-{
-    uint32_t                 err_code;
-    m_ui_init_t              ui_params;
-    m_ble_init_t             ble_params;
-    batt_meas_init_t         batt_meas_init = BATT_MEAS_PARAM_CFG;
+static void thingy_init(void) {
+  uint32_t                 err_code;
+  m_ui_init_t              ui_params;
+  m_ble_init_t             ble_params;
+  batt_meas_init_t         batt_meas_init = BATT_MEAS_PARAM_CFG;
 
-    /**@brief Initialize the TWI manager. */
-    err_code = twi_manager_init(APP_IRQ_PRIORITY_THREAD);
-    APP_ERROR_CHECK(err_code);
+  /**@brief Initialize the TWI manager. */
+  err_code = twi_manager_init(APP_IRQ_PRIORITY_THREAD);
+  APP_ERROR_CHECK(err_code);
 
-    /**@brief Initialize LED and button UI module. */
-    ui_params.p_twi_instance = &m_twi_sensors;
-    err_code = m_ui_init(&m_ble_service_handles[THINGY_SERVICE_UI],
-                         &ui_params);
-    APP_ERROR_CHECK(err_code);
+  /**@brief Initialize LED and button UI module. */
+  ui_params.p_twi_instance = &m_twi_sensors;
+  err_code = m_ui_init(&m_ble_service_handles[THINGY_SERVICE_UI],
+		       &ui_params);
+  APP_ERROR_CHECK(err_code);
 }
 
-static void board_init(void)
-{
-    uint32_t            err_code;
-    drv_ext_gpio_init_t ext_gpio_init;
+static void board_init(void) {
+  uint32_t            err_code;
+  drv_ext_gpio_init_t ext_gpio_init;
 
-    #if defined(THINGY_HW_v0_7_0)
-        #error   "HW version v0.7.0 not supported."
-    #elif defined(THINGY_HW_v0_8_0)
-        NRF_LOG_WARNING("FW compiled for depricated Thingy HW v0.8.0 \r\n");
-    #elif defined(THINGY_HW_v0_9_0)
-        NRF_LOG_WARNING("FW compiled for depricated Thingy HW v0.9.0 \r\n");
-    #endif
+#if defined(THINGY_HW_v0_7_0)
+#error   "HW version v0.7.0 not supported."
+#elif defined(THINGY_HW_v0_8_0)
+  NRF_LOG_WARNING("FW compiled for depricated Thingy HW v0.8.0 \r\n");
+#elif defined(THINGY_HW_v0_9_0)
+  NRF_LOG_WARNING("FW compiled for depricated Thingy HW v0.9.0 \r\n");
+#endif
 
-    static const nrf_drv_twi_config_t twi_config =
+  static const nrf_drv_twi_config_t twi_config =
     {
-        .scl                = TWI_SCL,
-        .sda                = TWI_SDA,
-        .frequency          = NRF_TWI_FREQ_400K,
-        .interrupt_priority = APP_IRQ_PRIORITY_LOW
+      .scl                = TWI_SCL,
+      .sda                = TWI_SDA,
+      .frequency          = NRF_TWI_FREQ_400K,
+      .interrupt_priority = APP_IRQ_PRIORITY_LOW
     };
 
-    static const drv_sx1509_cfg_t sx1509_cfg =
+  static const drv_sx1509_cfg_t sx1509_cfg =
     {
-        .twi_addr       = SX1509_ADDR,
-        .p_twi_instance = &m_twi_sensors,
-        .p_twi_cfg      = &twi_config
+      .twi_addr       = SX1509_ADDR,
+      .p_twi_instance = &m_twi_sensors,
+      .p_twi_cfg      = &twi_config
     };
 
-    ext_gpio_init.p_cfg = &sx1509_cfg;
+  ext_gpio_init.p_cfg = &sx1509_cfg;
     
-    err_code = support_func_configure_io_startup(&ext_gpio_init);
-    APP_ERROR_CHECK(err_code);
+  err_code = support_func_configure_io_startup(&ext_gpio_init);
+  APP_ERROR_CHECK(err_code);
 
-    nrf_delay_ms(100);
+  nrf_delay_ms(100);
 }
 
 static void timer_init(void)
 {
-    ret_code_t err_code = app_timer_init();
-    APP_ERROR_CHECK(err_code);
+  ret_code_t err_code = app_timer_init();
+  APP_ERROR_CHECK(err_code);
 }
 
 static void run_test(){
   ret_code_t err_code;
-  memset(&found_device, 0, sizeof(found_device));
-  start_tick = app_timer_cnt_get();
   blend_sched_start();
- 
+  //unittest_sorting();
 }
 
 //! Start inclusive, end exclusive.
@@ -283,28 +276,39 @@ uint32_t rng_rand(int start,int end) {
  *
  * @details This function will be called at the beginning of each epoch and update the payload accordingly.
  *
- * @param[in] sharing_type Context type that the host is sharing (Invalid identified by 0xFF).
- * @param[in] ctx_val Sensor reading of the context being shared.
+ * @param[in] context_t Context that the host is sharing (Invalid type identified by 0xFF).
  * @param[out] payload Pointer to the beacon payload array.
  *
  * @return Return status.
  */
-uint32_t update_payload(uint8_t sharing_type, uint32_t ctx_val1, uint32_t ctx_val2, uint8_t* payload) {
+uint32_t update_payload(context_t context_in, uint8_t* payload) {
+  // For debug purpose
+  /* char* x = malloc(sizeof(char) * 30); */
+  /* context2str(context_in, x); */
+  /* NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN "Encoding context: %s.\r\n", (uint32_t)x); */
+  /* free(x); */
+  
+  //uint8_t sharing_type, uint32_t ctx_val1, uint32_t ctx_val2, uint8_t* payload
   payload[0] = PROTOCOL_ID;
   payload[1] = DEVICE_ID;
-  payload[2] = node_lst_head->cap_vec & 0xFF; // Little endian
-  payload[3] = (node_lst_head->cap_vec >> 8);
-  payload[4] = node_lst_head->demand_vec & 0xFF;
-  payload[5] = (node_lst_head->demand_vec >> 8);
-  payload[6] = sharing_type;
-  uint8_t* vp = (uint8_t*) &ctx_val1;
-  for (int i = 0; i < 4; ++i) {
-    payload[7+i] = vp[i];
+  payload[2] = (localhost->cap_vec >> 8); // Big endian
+  payload[3] = localhost->cap_vec & 0xFF;
+  payload[4] = (localhost->demand_vec >> 8);
+  payload[5] = localhost->demand_vec & 0xFF;
+  if (current_task_type >= TASK_OFFSET) {
+    payload[6] = context_in.ctx_type;
+    uint8_t* vp = (uint8_t*) &(context_in.value1);
+    for (int i = 0; i < 4; ++i) {
+      payload[7+i] = vp[i];
+    }
+    vp = (uint8_t*) &(context_in.value2);
+    for (int i = 0; i < 4; ++i) {
+      payload[11+i] = vp[i];
+    }
+  } else {
+    memset(&payload[6], 0, 9*sizeof(uint8_t));
   }
-  vp = (uint8_t*) &ctx_val2;
-  for (int i = 0; i < 4; ++i) {
-    payload[11+i] = vp[i];
-  }
+
 
   m_blend_data.data_length = DATA_LENGTH;
   m_blend_data.data = payload;
@@ -318,19 +322,20 @@ uint32_t update_payload(uint8_t sharing_type, uint32_t ctx_val1, uint32_t ctx_va
 /**@brief Initialize the node's sensing equipment and tasks.
 */
 uint32_t middleware_init(void) {
-  node_t* host = malloc(sizeof(node_t));
-  host->node_id = DEVICE_ID;
+  localhost = malloc(sizeof(node_t));
+  localhost->node_id = DEVICE_ID;
   // TODO(liuchg): randomized init. for capabilities.
-  host->cap_vec = 0;
-  SetBit(host->cap_vec, 1);
-  SetBit(host->cap_vec, 2);
-  host->demand_vec = 0xFFFF;
-  host->next = NULL;
+  localhost->cap_vec = 0;
+  SetBit(localhost->cap_vec, 1);
+  SetBit(localhost->cap_vec, 2);
+  localhost->demand_vec = 0xFFFF;
+  localhost->next = NULL;
 
-  node_lst_head = host;
+  //node_lst_head = localhost;
 
   // Randomly assign a capapble task.
-  current_task_type = rng_rand(1, 3);
+  current_task_type = rng_rand(0, 2) + TASK_OFFSET;
+  prev_task_type = 0xff;
   
   return 0;
 }
@@ -340,36 +345,47 @@ uint32_t middleware_init(void) {
  * Reselect the sensing task based on the current neighborhood. Output to global variable current_task_type.
  */
 uint32_t update_sensing_task(void) {
-  // TODO(liuchg): Implement selection algorithm here.
-  current_task_type = rng_rand(1, 3);
-  if (current_task_type != TASK_IDLE) {
-    NRF_LOG_DEBUG("Selected  context type: %d.\r\n", current_task_type);
+  if (snapshot && compare_snapshots()) {
+    return 0;
+  }
+  uint8_t l_id = take_snapshot();
+  current_task_type = get_new_assignment(snapshot, l_id);
+  if (current_task_type >= TASK_OFFSET && (current_task_type - TASK_OFFSET) <= NUM_ENABLED_SENSOR && TestBit(localhost->cap_vec, current_task_type - TASK_OFFSET)) {
+    NRF_LOG_DEBUG("Context task selected: %d.\r\n", current_task_type - TASK_OFFSET);
+  } else {
+    NRF_LOG_DEBUG("Context task selected: Idle (%d, l_id:%d).\r\n", current_task_type, l_id);
+    current_task_type = TASK_IDLE;
   }
   return 0;
 }
 
-/**@brief Query the sensor and update the payload, if current task is valid.
+/**@brief Query the sensor and update the shared context, if current task is valid.
  */
 uint32_t execute_sensing_task(void) {
-  if (current_task_type == TASK_IDLE) {
+  if (current_task_type < TASK_OFFSET) {
     return 0;
   }
-  // TODO(liuchg): Fetch the sensor reading and update the payload.
+  // JH: The code below is only a testbed for Christine to create the Android code.
+  context_sample(current_task_type - TASK_OFFSET);
+  saved_reading = context_read(current_task_type - TASK_OFFSET);
   return 0;
 }
 
 /**@brief Context type visualization using the lightwell.
 */
 uint32_t update_light(void) {
-  if (current_task_type >= 3) { // TODO(liuchg): enable real checking below.
-  //  if (current_task_type >= NUM_SENSOR_TYPE) {
+  if (current_task_type == prev_task_type) {
+    return 0;
+  }
+  if (current_task_type - TASK_OFFSET > NUM_ENABLED_SENSOR) { // TODO(liuchg): enable real checking below.
+  //  if (current_task_type - TASK_OFFSET >= NUM_SENSOR_TYPE) {
     NRF_LOG_ERROR("Update light error (task context type out of range.)");
     return 1;
   }
   
-  //ret_code_t err_code = led_set(&led_colors[current_task_type],NULL);
-  ret_code_t err_code = led_set(&led_colors[2],NULL);
+  ret_code_t err_code = led_set(&led_colors[current_task_type],NULL);
   APP_ERROR_CHECK(err_code);
+  prev_task_type = current_task_type;
   return 0;
 }
 
@@ -377,43 +393,73 @@ uint32_t update_light(void) {
 */
 decoded_packet_t decode(uint8_t * bytes) {
     uint8_t ngbr_id = bytes[1];
-    uint16_t ngbr_cap = bytes[2] + (bytes[3] << 8);
-    uint16_t ngbr_demand = bytes[4] + (bytes[5] << 8);
+    uint16_t ngbr_cap = bytes[3] + (bytes[2] << 8);
+    uint16_t ngbr_demand = bytes[5] + (bytes[4] << 8);
     uint8_t ctx_type = bytes[6];
+    bool ctx_valid = (ctx_type >= TASK_OFFSET);
     uint16_t val1 = 0;
     uint16_t val2 = 0;
-    if (ctx_type) {
-      val1 = bytes[7] + (bytes[8] << 8) + (bytes[9] << 16) + (bytes[10] << 24);
-    }
+    val1 = bytes[7] + (bytes[8] << 8) + (bytes[9] << 16) + (bytes[10] << 24);
     //TODO(liuchg): Process the extended field for rich types.
-    uint32_t cur_time = app_timer_cnt_get();
-    context_t cur_context = {ngbr_id, ctx_type, val1, val2, cur_time};
-    decoded_packet_t decoded = {ngbr_id, ngbr_cap, ngbr_demand, cur_context, cur_time};
+    uint32_t cur_time_ms = app_timer_cnt_get();
+    context_t cur_context = {ngbr_id, ctx_type, val1, val2, cur_time_ms};
+    decoded_packet_t decoded = {ngbr_id, ngbr_cap, ngbr_demand, ctx_valid, cur_context, cur_time_ms};
     return decoded;
 }
 
 /**@brief Update the neighbor list from received packet.
+ *
+ * @details Passing nullptr if the purpose is to clean up lost nodes.
+ *
+ * @param[in] packet Received packet from radio frame.
 */
 uint32_t update_neighbor_list(decoded_packet_t* packet) {
-  node_t* prev = node_lst_head;
-  node_t* cur = prev->next;
-  while(cur && cur->node_id != packet->node_id) {
-    cur = cur->next;
-    prev = prev->next;
-  }
-  if (!cur) {
-    node_t* append_ngbr = malloc(sizeof(node_t));
-    append_ngbr->node_id = packet->node_id;
-    append_ngbr->cap_vec = packet->cap_vec;
-    append_ngbr->demand_vec = packet->demand_vec;
-    append_ngbr->last_sync_ms = packet->timestamp_ms;
-    append_ngbr->next = NULL;
-    prev->next = append_ngbr;
-  } else {
-    cur->last_sync_ms = packet->timestamp_ms;
-  }
-  //TODO(liuchg): remove lost nodes.
+  node_t* cur = node_lst_head;
+  node_t* prev = NULL;
   
+  if (packet) {
+    while(cur && cur->node_id != packet->node_id) {
+      prev = cur;
+      cur = cur->next;
+    }
+    if(!cur) {
+      node_t* append_ngbr = malloc(sizeof(node_t));
+      append_ngbr->node_id = packet->node_id;
+      append_ngbr->cap_vec = packet->cap_vec;
+      append_ngbr->demand_vec = packet->demand_vec;
+      append_ngbr->last_sync_ms = packet->timestamp_ms;
+      append_ngbr->next = NULL;
+      if (prev) {
+	prev->next = append_ngbr;
+      } else {
+	node_lst_head = append_ngbr;
+      }
+    } else {
+      cur->last_sync_ms = packet->timestamp_ms;
+      // TODO(liuchg): Check cap and demand changes if the env. is dynamic
+    }
+    cur = node_lst_head;
+    prev = NULL;
+  }
+
+  uint32_t cur_time_ms = app_timer_cnt_get();
+  while(cur) {
+    if (cur->last_sync_ms + LOSING_PERIOD*lambda_ms < cur_time_ms) {
+      if (prev) {
+	prev->next = cur->next;
+	free(cur);
+	cur = prev->next;
+      } else {
+	node_lst_head = cur->next;
+	free(cur);
+	cur = node_lst_head;
+      }
+    } else {
+      prev = cur;
+      cur = cur->next;
+    }
+  }
+
   return 0;
 }
 
@@ -439,37 +485,49 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
   case BLEND_EVT_ADV_REPORT: {
     uint8_t * p_data = p_blend_evt->evt_data.data;
     uint8_t plen = p_blend_evt->evt_data.data_length;
-    if (p_data[0] != PROTOCOL_ID || plen != DATA_LENGTH) {
+    // JH: plen here is not the actual length of the data. Since BLEnd does not have a 
+    // byte to denote length, all the data length is the maximum length which is 26 here.
+    //if (p_data[0] != PROTOCOL_ID || plen != DATA_LENGTH) {
+    if (p_data[0] != PROTOCOL_ID) {
       break;
     }
     decoded_packet_t decoded_packet = decode(p_data);
     update_neighbor_list(&decoded_packet);
-    udpate_context_pool(&decoded_packet);
+    if (decoded_packet.is_ctx_valid){
+      udpate_context_pool(&decoded_packet);
+    }
+    // For debug purpose
+    char* x = malloc(sizeof(char) * 30);
+    context2str(decoded_packet.context, x);
+    NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN "Read context: %s from node %d (cap:%d).\r\n", (uint32_t)x, decoded_packet.context.source_id, decoded_packet.cap_vec);
+    free(x);
     break;
     }
   case BLEND_EVT_EPOCH_START: {
-    epoch_count += 1;  // CL: Overflow??
-    NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN"Epoch %d started.\r\n", epoch_count);
     break;
   }
   case BLEND_EVT_AFTER_SCAN: {
-    NRF_LOG_DEBUG("Scan stopped.\r\n", epoch_count);
+    update_neighbor_list(NULL);
 
     // JH: sample code for sample, read, and to_string the context type.
-    context_sample(0);
-    context_sample(1);
-    context_sample(2);
-    context_t temp = context_read(0);
-    context_t humid = context_read(1);
-    context_t press = context_read(2);
-    char* x = malloc(sizeof(char) * 30);
-    context2str(temp, x);
-    NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x);
-    context2str(humid, x);
-    NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x);
-    context2str(press, x);
-    NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x);
-    free(x);
+    /* context_sample(TEMP_CTX); */
+    /* context_sample(HUMID_CTX); */
+    /* context_sample(PRESS_CTX); */
+    /* context_sample(COLOR_CTX); */
+    /* context_t temp = context_read(TEMP_CTX); */
+    /* context_t humid = context_read(HUMID_CTX); */
+    /* context_t press = context_read(PRESS_CTX); */
+    /* context_t color = context_read(COLOR_CTX); */
+    /* char* x = malloc(sizeof(char) * 30); */
+    /* context2str(temp, x); */
+    /* NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x); */
+    /* context2str(humid, x); */
+    /* NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x); */
+    /* context2str(press, x); */
+    /* NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x); */
+    /* context2str(color, x); */
+    /* NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x); */
+    /* free(x); */
     // Update sensing task
     update_sensing_task();
     // Execute sensing task
@@ -478,7 +536,7 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     update_light();
 
     // Update beacon payload
-    if (update_payload(current_task_type, 7, 0, payload)) {
+    if (update_payload(saved_reading, payload)) {
       NRF_LOG_ERROR("Error when updating beacon payload.");
     }
     break;
@@ -493,7 +551,10 @@ void sensor_init()
 {
   humidity_sensor_init(&m_twi_sensors);
   pressure_sensor_init(&m_twi_sensors);
+  color_sensor_init(&m_twi_sensors);
 }
+/* === End of Section (Board Functions) === */
+
 
 int main(void) {
   uint32_t err_code;
@@ -532,3 +593,168 @@ int main(void) {
         }
     }
 }
+
+/* === Section (Function Prototype Implementation) === */
+
+/**@brief Comparing the current neighborhood status with the snapshot.
+ *
+ * @return Whether the state is the same.
+ */
+bool compare_snapshots(void) {
+  node_t* cur_it = node_lst_head;
+  node_t* snap_it = snapshot;
+  while(cur_it || snap_it) {
+    if (snap_it && snap_it->node_id == localhost->node_id) {
+      snap_it = snap_it->next;
+      continue;
+    }
+    if (!cur_it || !snap_it) {
+      return false;
+    }
+    if (!(cur_it->node_id == snap_it->node_id && cur_it->cap_vec == snap_it->cap_vec && cur_it->demand_vec == snap_it->demand_vec)) {
+      return false;
+    }
+    if (cur_it) {
+      cur_it = cur_it->next;
+    }
+    if (snap_it) {
+      snap_it = snap_it->next;
+    }
+  }
+  return true;
+}
+
+/**@brief Take a snapshot of the current neighborhood.
+ *
+ * @return Index of localhost.
+ */
+uint8_t take_snapshot(void) {
+  node_t* it = snapshot;
+  while(snapshot) {
+    it = snapshot;
+    snapshot = snapshot->next;
+    free(it);
+  }
+  uint8_t l_id = 0;
+  if (node_lst_head) {
+    mergesort(&(node_lst_head));
+    it = node_lst_head;
+    node_t* s_prev;
+    while(it) {
+      node_t* elmt = (node_t*)malloc(sizeof(node_t));
+      elmt->node_id = it->node_id;
+      if (elmt->node_id < localhost->node_id) {
+	++l_id;
+      }
+      elmt->cap_vec = it->cap_vec;
+      elmt->demand_vec = it->demand_vec;
+      elmt->next = NULL;
+      if (!snapshot) {
+	snapshot = elmt;
+      } else {
+	s_prev->next = elmt;
+      }
+      s_prev = elmt;
+      it = it->next;
+    }
+  }
+  // Insert localhost
+  node_t* copy_loc = (node_t*)malloc(sizeof(node_t));
+  copy_loc->node_id = localhost->node_id;
+  copy_loc->cap_vec = localhost->cap_vec;
+  copy_loc->demand_vec = localhost->demand_vec;
+  if (l_id == 0) {
+    copy_loc->next = snapshot;
+    snapshot = copy_loc;
+  } else {
+    it = snapshot;
+    for (int i = l_id - 1; i > 0; --i) {
+      it = it->next;
+    }
+    copy_loc->next = it->next;
+    it->next = copy_loc;
+  }
+  return l_id;
+}
+
+void mergesort(node_t** head_ref) {
+  node_t* head = *head_ref;
+  node_t* lst1;
+  node_t* lst2;
+  if ((head == NULL) || head->next == NULL) {
+    return;
+  }
+  front_back_split(head, &lst1, &lst2);
+  mergesort(&lst1);
+  mergesort(&lst2);
+  *head_ref = merge_sorted(lst1, lst2);
+}
+
+node_t* merge_sorted(node_t* lst1, node_t* lst2) {
+  node_t* ret = NULL;
+  if (!lst1) {
+    return lst2;
+  } else if (!lst2) {
+    return lst1;
+  }
+
+  if (lst1->node_id <= lst2->node_id) {
+    ret = lst1;
+    ret->next = merge_sorted(lst1->next, lst2);
+  } else {
+    ret = lst2;
+    ret->next = merge_sorted(lst1, lst2->next);
+  }
+
+  return ret;
+}
+
+void front_back_split(node_t* source, node_t** front_ref, node_t** back_ref) {
+  node_t* slow = source;
+  node_t* fast = source->next;
+  while (fast) {
+    fast = fast->next;
+    if (fast) {
+      slow = slow->next;
+      fast = fast->next;
+    }
+  }
+  // Slow stops before the mid.
+  *front_ref = source;
+  *back_ref = slow->next;
+  slow->next = NULL;
+}
+
+/* === End of Section (Function Prototype Implementation) === */
+
+/* === Section (Tests) === */
+
+void push(node_t** head_ref, int node_id)
+{
+    node_t* new_node = (node_t*) malloc(sizeof(node_t));
+    new_node->node_id  = node_id;
+    new_node->next = (*head_ref);
+    (*head_ref) = new_node;
+}
+
+void printlist(node_t* node)
+{
+  NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN " ==== PRINT LIST \r\n");
+  while(node != NULL) {
+      NRF_LOG_DEBUG("%d ", node->node_id);
+      node = node->next;
+  }
+  NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN "\n ==== PRINT LIST \r\n");
+}
+
+void unittest_sorting() {
+  push(&node_lst_head, 15);
+  push(&node_lst_head, 8);
+  push(&node_lst_head, 2);
+  push(&node_lst_head, 3);
+  push(&node_lst_head, 11);
+  mergesort(&(node_lst_head->next));
+  printlist(node_lst_head);
+  // Expected: 11, 1, 2, 3, 8, 15
+}
+/* === End of Section (Tests) === */

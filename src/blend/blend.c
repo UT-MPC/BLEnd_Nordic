@@ -450,7 +450,6 @@ void one_beacon_timer_handler() {
   if (_epoch_flag == 1){
     _blend_epoch_start = app_timer_cnt_get();
     _blend_scan_sd_start();
-    NRF_LOG_DEBUG("In Blend module: scan start");
     ret =app_timer_start(scan_timer,APP_TIMER_TICKS(_scan_duration_ms), NULL);
     APP_ERROR_CHECK(ret);
   }
@@ -469,7 +468,6 @@ void scan_stop(void) {
   ret_code_t ret;
   ret = sd_ble_gap_scan_stop();
   APP_ERROR_CHECK(ret);
-  NRF_LOG_DEBUG("In Blend module: scan stopped");
 }
 
 
@@ -518,16 +516,20 @@ void beacon_count_timer_handler (void * p_context) {
   _blend_sent_beacon_count += 1;
   beacon_count_set (_blend_sent_beacon_count);
 	
-  if (_blend_sent_beacon_count <= _mid_beacon || _blend_mode == 1) {
+  if (_blend_sent_beacon_count <= _mid_beacon || _blend_mode == BLEND_MODE_FULL) {
     advertising_start();	
   }
 
-  if (_blend_sent_beacon_count > _mid_beacon && _shadow_beacons[_blend_sent_beacon_count] == 1 && _blend_mode == 3) {
+  if (_blend_sent_beacon_count > _mid_beacon && _shadow_beacons[_blend_sent_beacon_count] == 1 && _blend_mode == BLEND_MODE_BI) {
     advertising_start();
   }
 }
 
 void blend_sched_start() {
+  if (_blend_mode == BLEND_MODE_SINK){
+    _blend_scan_sd_start();
+    return;
+  }
   ret_code_t err_code;
   _epoch_flag = 1;
   err_code=app_timer_start(half_epoch_timer,APP_TIMER_TICKS(_epoch_length_ms /2), NULL);
@@ -558,18 +560,24 @@ void blend_timer_set(void) {
 }
 
 void blend_param_set(blend_param_t input) {
+  _blend_mode = input.blend_mode;
+  if (_blend_mode == BLEND_MODE_SINK) {
+    return;
+  }
   _epoch_length_ms = input.epoch_length_ms;
   _adv_interval_ms = input.adv_interval_ms;
   _scan_duration_ms = (_adv_interval_ms + 5 + 10);
   _shadow_beacons = (uint8_t *) malloc( (ROUNDED_DIV(_epoch_length_ms , _adv_interval_ms) + 2) * sizeof(uint8_t)) ;
   _mid_beacon = ((_epoch_length_ms / 2) - _scan_duration_ms + _adv_interval_ms / 2 ) / _adv_interval_ms ;
-  _blend_mode = input.blend_mode;
 }
 
 blend_ret_t blend_advdata_set(blend_data_t *input) {
   uint8_t dlen = input->data_length;
   uint8_t * payload = input->data;
 	
+  if (_blend_mode == BLEND_MODE_SINK) {
+    return BLEND_DATA_IN_SINK_MODE;
+  }
   if (dlen > BLEND_USER_PAYLOAD_SIZE) {
     return BLEND_DATA_OVERFLOW;
   }
@@ -593,7 +601,6 @@ blend_ret_t blend_advdata_set(blend_data_t *input) {
 
 #ifdef BLEND_SDK_15
 void blend_init(blend_param_t input, blend_evt_handler_t handler) {
-  NRF_LOG_DEBUG("Blend init start\n");
   blend_param_set(input);
   timer_init();
   blend_ble_stack_init();
@@ -601,7 +608,6 @@ void blend_init(blend_param_t input, blend_evt_handler_t handler) {
   blend_timer_set();
   _blend_evt_handler = handler;
   memset(_blend_beacon_content, 0, sizeof(_blend_beacon_content));
-  NRF_LOG_DEBUG("Blend init finished\n");
 }
 #endif
 

@@ -42,9 +42,11 @@ $(abspath ../../../sdk_components/nfc/t2t_lib/nfc_t2t_lib_gcc.a) \
 
 #source common to all targets
 C_SOURCE_FILES += \
-$(abspath ../main.c) \
-$(abspath ../sensor.c) \
 $(abspath ../context.c) \
+$(abspath ../hungarian.c) \
+$(abspath ../main.c) \
+$(abspath ../matching.c) \
+$(abspath ../sensor.c) \
 $(abspath ../../../blend/blend.c) \
 $(abspath ../../../source/modules/m_ble.c) \
 $(abspath ../../../source/modules/m_ble_flash.c) \
@@ -412,5 +414,5 @@ flash: nrf52832_xxaa_s132
 ## Flash softdevice
 flash_softdevice:
 	@echo Flashing: s132_nrf52_2.0.0_softdevice.hex
-	nrfjprog --program ../../../sdk_components/softdevice/s132/hex/s132_nrf52_2.0.0_softdevice.hex -f nrf52 --chiperase
+	nrfjprog --program ../../../sdk_components/softdevice/s132/hex/s132_nrf52_*_softdevice.hex -f nrf52 --chiperase
 	nrfjprog --reset -f nrf52
