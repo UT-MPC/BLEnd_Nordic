@@ -97,9 +97,9 @@
 #define LOSING_PERIOD 2.5
 
 //! BLEnd parameters {Epoch, Adv. interval, mode}.
-const uint16_t lambda_ms = 2000;
-const uint16_t epoch_length_ms = 2000;
-const uint16_t adv_interval_ms = 77;
+const uint16_t lambda_ms = 4000;
+const uint16_t epoch_length_ms = 2430;
+const uint16_t adv_interval_ms = 106;
 
 //! {protocol_id, node_id, cap_vec, demand_vec, shared_type, value1, value2}.
 uint8_t payload[DATA_LENGTH];
@@ -492,6 +492,9 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
       break;
     }
     decoded_packet_t decoded_packet = decode(p_data);
+    if (decoded_packet.node_id == DEVICE_ID) {
+      return;
+    }
     update_neighbor_list(&decoded_packet);
     if (decoded_packet.is_ctx_valid){
       udpate_context_pool(&decoded_packet);
