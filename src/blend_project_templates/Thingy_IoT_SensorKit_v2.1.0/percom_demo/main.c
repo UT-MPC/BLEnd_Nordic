@@ -89,7 +89,7 @@
 #define SCHED_QUEUE_SIZE 60
 
 #define PROTOCOL_ID 0x8B
-#define DEVICE_ID 0x00
+#define DEVICE_ID 0x01
 #define MAX_DEVICE 10
 #define DATA_LENGTH 15
 #define NUM_ENABLED_SENSOR 3
@@ -107,7 +107,7 @@ blend_data_t m_blend_data;
 
 static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
 
-static const ble_uis_led_t led_colors[5] = {LED_CONFIG_WHITE, LED_CONFIG_GREEN, LED_CONFIG_PURPLE, LED_CONFIG_BLUE, LED_CONFIG_RED};
+static const ble_uis_led_t led_colors[6] = {LED_CONFIG_WHITE, LED_CONFIG_YELLOW, LED_CONFIG_GREEN, LED_CONFIG_PURPLE, LED_CONFIG_BLUE, LED_CONFIG_RED};
 
 uint8_t on_scan_flag  = 0;
 uint8_t discovered = 0;
@@ -326,6 +326,7 @@ uint32_t middleware_init(void) {
   localhost->node_id = DEVICE_ID;
   // TODO(liuchg): randomized init. for capabilities.
   localhost->cap_vec = 0;
+  SetBit(localhost->cap_vec, 0);
   SetBit(localhost->cap_vec, 1);
   SetBit(localhost->cap_vec, 2);
   localhost->demand_vec = 0xFFFF;
@@ -377,12 +378,10 @@ uint32_t update_light(void) {
   if (current_task_type == prev_task_type) {
     return 0;
   }
-  if (current_task_type - TASK_OFFSET > NUM_ENABLED_SENSOR) { // TODO(liuchg): enable real checking below.
-  //  if (current_task_type - TASK_OFFSET >= NUM_SENSOR_TYPE) {
+  if (current_task_type - TASK_OFFSET > NUM_ENABLED_SENSOR) {
     NRF_LOG_ERROR("Update light error (task context type out of range.)");
     return 1;
   }
-  
   ret_code_t err_code = led_set(&led_colors[current_task_type],NULL);
   APP_ERROR_CHECK(err_code);
   prev_task_type = current_task_type;
