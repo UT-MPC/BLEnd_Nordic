@@ -402,7 +402,7 @@ void _blend_scan_sd_start() {
 }
 #endif
 
-void beacon_slack_timer_handler(void) {
+void beacon_slack_timer_handler() {
   _blend_beacon_sd_start();
   _blend_on_beacon_flag = 1;
 }
