@@ -334,7 +334,7 @@ static void application_timer_set(void)
 static void run_test(){
 	ret_code_t err_code;
 	
-	int random_duration = get_random(0,m_blend_param.epoch_during_in_ms);
+	int random_duration = get_random(0,m_blend_param.epoch_length_ms);
 
 	err_code=app_timer_start(random_timer,APP_TIMER_TICKS(random_duration),NULL);
 	APP_ERROR_CHECK(err_code);
@@ -402,12 +402,6 @@ int main(void)
 	// Initialize Blend module with your param and handler
 	blend_init(m_blend_param, m_blend_handler);
 	bsp_board_led_on(BSP_BOARD_LED_0);
-	// Noop loop in order to randomize each device.
-	int i =0, j =0;
-	for (i = 0; i< 10000; i++){
-		j = i + APP_DEVICE_NUM;
-		//j = i;
-	}
 	
 	//Setting the blend payload. 
 	set_blend_data();

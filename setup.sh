@@ -13,10 +13,11 @@ declare -a SDK_ADDR=("https://developer.nordicsemi.com/nRF5_SDK/nRF5_SDK_v15.x.x
 		    )
 declare -a SDK_NAMES=("nRF5_SDK_v15" "nRF5_SDK_v14" "Thingy_IoT_SensorKit_v2.1.0")
 declare -a THINGY_SDK_CHANGES=("include" "source")
-declare -a TEMPLATE_PROJECTS=("blend_app_template" "percom_demo")
+declare -a TEMPLATE_PROJECTS=("blend_app_template" "percom_demo" "blend_app_template_gps")
 
 ARCHIVE_NAME="@ARCHIVE_NAME@"
 BLEND_SRC_DIR="src/blend"
+GPS_SRC_DIR="src/Adafruit_GPS"
 BLEND_TEMP_ORI_LOCATION="src/blend_project_templates"
 BLEND_TEMP_NAME="blend_app_template"
 COMPILE_THINGY_SDK_URL="https://github.com/NordicSemiconductor/Nordic-Thingy52-FW/blob/master/README.md"
@@ -148,6 +149,25 @@ add_blend_src()
     fi
 }
 
+add_gps_mod()
+{
+    echo -e "\nAdding Adafruit GPS control source to the SDK..."
+    if [ ! -d "${GPS_SRC_DIR}" ]; then
+	echo " Error. Source directory doesn't exist."
+	exit 1
+    fi
+    if [ ! -d "${SDK_PATH}" ]; then
+	echo " Error. SDK directory doesn't exist."
+	exit 1
+    fi
+
+    cp -r "${GPS_SRC_DIR}" "${SDK_PATH}"
+
+    if [ -d "${SDK_PATH}/Adafruit_GPS" ]; then
+	echo " Done."
+    fi
+
+}
 add_template_project()
 {
     echo -e "\nCreating template project..."
@@ -215,6 +235,8 @@ version_select
 download_sdk
 
 add_blend_src
+
+add_gps_mod
 
 add_template_project
 
