@@ -292,8 +292,8 @@ uint32_t update_payload(context_t context_in, uint8_t* payload) {
   //uint8_t sharing_type, uint32_t ctx_val1, uint32_t ctx_val2, uint8_t* payload
   payload[0] = PROTOCOL_ID;
   payload[1] = DEVICE_ID;
-  payload[2] = (localhost->cap_vec >> 8); // Big endian
-  payload[3] = localhost->cap_vec & 0xFF;
+  payload[2] = localhost->cap_vec & 0xFF; // Little endian
+  payload[3] = (localhost->cap_vec >> 8);
   payload[4] = (localhost->demand_vec >> 8);
   payload[5] = localhost->demand_vec & 0xFF;
   if (current_task_type >= TASK_OFFSET) {
@@ -393,8 +393,8 @@ uint32_t update_light(void) {
 */
 decoded_packet_t decode(uint8_t * bytes) {
     uint8_t ngbr_id = bytes[1];
-    uint16_t ngbr_cap = bytes[3] + (bytes[2] << 8);
-    uint16_t ngbr_demand = bytes[5] + (bytes[4] << 8);
+    uint16_t ngbr_cap = bytes[2] + (bytes[3] << 8);
+    uint16_t ngbr_demand = bytes[4] + (bytes[5] << 8);
     uint8_t ctx_type = bytes[6];
     bool ctx_valid = (ctx_type >= TASK_OFFSET);
     uint16_t val1 = 0;
