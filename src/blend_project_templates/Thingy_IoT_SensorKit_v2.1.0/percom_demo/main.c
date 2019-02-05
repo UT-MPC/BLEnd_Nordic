@@ -297,7 +297,7 @@ uint32_t update_payload(context_t context_in, uint8_t* payload) {
   payload[4] = (localhost->demand_vec >> 8);
   payload[5] = localhost->demand_vec & 0xFF;
   if (current_task_type >= TASK_OFFSET) {
-    payload[6] = context_in.ctx_type;
+    payload[6] = current_task_type;
     uint8_t* vp = (uint8_t*) &(context_in.value1);
     for (int i = 0; i < 4; ++i) {
       payload[7+i] = vp[i];
