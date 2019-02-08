@@ -92,10 +92,10 @@
 #define PROTOCOL_ID 0x8B
 #define DEVICE_ID 0x01
 #define MAX_DEVICE 10
-#define DATA_LENGTH 15
+#define DATA_LENGTH 16
 #define NUM_ENABLED_SENSOR 3
 #define LOSING_PERIOD 2.5
-
+#define BATT_READ_INTERVAL_MS 600000    //10min
 //! BLEnd parameters {Epoch, Adv. interval, mode}.
 const uint16_t lambda_ms = 4000;
 const uint16_t epoch_length_ms = 2430;
@@ -115,6 +115,9 @@ uint8_t discovered = 0;
 bool discover_mode = true;
 
 static const nrf_drv_twi_t m_twi_sensors = NRF_DRV_TWI_INSTANCE(TWI_SENSOR_INSTANCE);
+
+// batt
+uint8_t batt_lvl_read = 0;
 
 /*!< List of nodes in the neighborhood(self-exclusive). */
 node_t* node_lst_head;
@@ -309,7 +312,7 @@ uint32_t update_payload(context_t context_in, uint8_t* payload) {
   } else {
     memset(&payload[6], 0, 9*sizeof(uint8_t));
   }
-
+  payload[15] = batt_lvl_read;
 
   m_blend_data.data_length = DATA_LENGTH;
   m_blend_data.data = payload;
@@ -512,25 +515,6 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
   case BLEND_EVT_AFTER_SCAN: {
     update_neighbor_list(NULL);
 
-    // JH: sample code for sample, read, and to_string the context type.
-    /* context_sample(TEMP_CTX); */
-    /* context_sample(HUMID_CTX); */
-    /* context_sample(PRESS_CTX); */
-    /* context_sample(COLOR_CTX); */
-    /* context_t temp = context_read(TEMP_CTX); */
-    /* context_t humid = context_read(HUMID_CTX); */
-    /* context_t press = context_read(PRESS_CTX); */
-    /* context_t color = context_read(COLOR_CTX); */
-    /* char* x = malloc(sizeof(char) * 30); */
-    /* context2str(temp, x); */
-    /* NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x); */
-    /* context2str(humid, x); */
-    /* NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x); */
-    /* context2str(press, x); */
-    /* NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x); */
-    /* context2str(color, x); */
-    /* NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x); */
-    /* free(x); */
     // Update sensing task
     update_sensing_task();
     // Execute sensing task
@@ -556,6 +540,41 @@ void sensor_init()
   pressure_sensor_init(&m_twi_sensors);
   color_sensor_init(&m_twi_sensors);
 }
+static void m_batt_meas_handler(m_batt_meas_event_t const * p_batt_meas_event)
+{
+  NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN"Voltage: %d V, Charge: %d %%, Event type: %d \r\n",
+              p_batt_meas_event->voltage_mv, p_batt_meas_event->level_percent, p_batt_meas_event->type);
+  batt_lvl_read = p_batt_meas_event->level_percent;
+  if (p_batt_meas_event != NULL)
+  {
+    if( p_batt_meas_event->type == M_BATT_MEAS_EVENT_LOW)
+    {
+      uint32_t err_code;
+
+      err_code = support_func_configure_io_shutdown();
+      APP_ERROR_CHECK(err_code);
+      
+      // Enable wake on USB detect only.
+      nrf_gpio_cfg_sense_input(USB_DETECT, NRF_GPIO_PIN_NOPULL, NRF_GPIO_PIN_SENSE_HIGH);
+
+      NRF_LOG_WARNING("Battery voltage low, shutting down Thingy. Connect USB to charge \r\n");
+      NRF_LOG_FINAL_FLUSH();
+      // Go to system-off mode (This function will not return; wakeup will cause a reset).
+      err_code = sd_power_system_off();
+      APP_ERROR_CHECK(err_code);
+    }
+  }
+}
+void batt_init(){
+  uint32_t err_code;
+  batt_meas_init_t         batt_meas_init = BATT_MEAS_PARAM_CFG;
+  batt_meas_init.evt_handler = m_batt_meas_handler;
+  err_code = m_batt_meas_init(&m_ble_service_handles[THINGY_SERVICE_BATTERY], &batt_meas_init);
+  APP_ERROR_CHECK(err_code);
+
+  err_code = m_batt_meas_enable(BATT_READ_INTERVAL_MS);
+  APP_ERROR_CHECK(err_code);
+}
 /* === End of Section (Board Functions) === */
 
 
@@ -564,7 +583,6 @@ int main(void) {
   err_code = NRF_LOG_INIT(NULL);
   APP_ERROR_CHECK(err_code);
   timer_init();
-
   blend_param_t m_blend_param = {epoch_length_ms, adv_interval_ms, BLEND_MODE_FULL};
 
   NRF_LOG_DEBUG("===== Blend mode %d started! =====\r\n", m_blend_param.blend_mode);
@@ -574,13 +592,12 @@ int main(void) {
 		
   
   APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
-  err_code = app_timer_init();
-  APP_ERROR_CHECK(err_code);
 
   board_init();
   thingy_init();
   sensor_init();
   blend_init(m_blend_param, m_blend_handler, m_ble_service_handles);
+  batt_init();
 
   middleware_init();
 
@@ -592,7 +609,7 @@ int main(void) {
 
       if (!NRF_LOG_PROCESS()) // Process logs
         { 
-	  power_manage();
+	        power_manage();
         }
     }
 }
