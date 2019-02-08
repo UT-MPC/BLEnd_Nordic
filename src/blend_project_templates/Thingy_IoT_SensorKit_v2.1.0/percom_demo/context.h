@@ -37,7 +37,7 @@ typedef struct {
   uint8_t ctx_type; /*!< Type of the context value contained. */
   uint32_t value1; /*!< 32-bit context value. */
   uint32_t value2; /*!< (optional)32-bit context value. */
-  uint32_t timestamp_ms; /*!< Received time in microseconds. */
+  uint64_t timestamp_ms; /*!< Received time in microseconds. */
 } context_t;
 
 /*! \brief Structure of the exchange packets.
@@ -48,7 +48,7 @@ typedef struct {
   uint16_t demand_vec; /*!< Bit vector for sensing capabilities. */
   bool is_ctx_valid; /*!< Whether the context is valid. */
   context_t context;  /*!< Context values in the packet*/
-  uint32_t timestamp_ms; /*!< Received time in microseconds. */
+  uint64_t timestamp_ms; /*!< Received time in microseconds. */
 } decoded_packet_t;
 
 typedef void (*sensor2ctx_func_t) (void* , context_t*);
