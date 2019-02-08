@@ -92,7 +92,7 @@
 #define PROTOCOL_ID 0x8B
 #define DEVICE_ID 0x01
 #define MAX_DEVICE 10
-#define DATA_LENGTH 15
+#define DATA_LENGTH 16
 #define NUM_ENABLED_SENSOR 3
 #define LOSING_PERIOD 2.5
 #define BATT_READ_INTERVAL_MS 600000    //10min
@@ -313,7 +313,7 @@ uint32_t update_payload(context_t context_in, uint8_t* payload) {
   } else {
     memset(&payload[6], 0, 9*sizeof(uint8_t));
   }
-
+  payload[15] = batt_lvl_read;
 
   m_blend_data.data_length = DATA_LENGTH;
   m_blend_data.data = payload;
