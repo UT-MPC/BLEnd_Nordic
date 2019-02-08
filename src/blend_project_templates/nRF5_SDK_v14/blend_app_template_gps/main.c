@@ -312,12 +312,10 @@ static void set_blend_data()
 	m_blend_data.data = payload;
 
     payload[6] = GPS_TASK_TYPE;
-    saved_location.latitude = -10.5;
     uint8_t* vp = (uint8_t*) &(saved_location.latitude);
     for (int i = 0; i < 4; ++i) {
       payload[7+i] = vp[i];
     }
-    saved_location.longitude = 115.6;
     vp = (uint8_t*) &(saved_location.longitude);
     for (int i = 0; i < 4; ++i) {
       payload[11+i] = vp[i];
