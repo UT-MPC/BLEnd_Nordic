@@ -1,0 +1,90 @@
+<html>
+<body>
+<pre>
+<h1>µVision Build Log</h1>
+<h2>Tool Versions:</h2>
+IDE-Version: µVision V5.24.2.0
+Copyright (C) 2017 ARM Ltd and ARM Germany GmbH. All rights reserved.
+License Information: Jie Hua, University of Texas at Austin, LIC=P6FVG-E1EUS-39TLA-JKXLZ-CZLPI-29W54
+ 
+Tool Versions:
+Toolchain:       MDK-ARM Professional  Version: 5.24.1
+Toolchain Path:  C:\Keil_v5\ARM\ARMCC\Bin
+C Compiler:      Armcc.exe V5.06 update 5 (build 528)
+Assembler:       Armasm.exe V5.06 update 5 (build 528)
+Linker/Locator:  ArmLink.exe V5.06 update 5 (build 528)
+Library Manager: ArmAr.exe V5.06 update 5 (build 528)
+Hex Converter:   FromElf.exe V5.06 update 5 (build 528)
+CPU DLL:         
+Dialog DLL:      
+Target DLL:      Segger\JL2CM3.dll V2.99.26.0
+Dialog DLL:      TCM.DLL V1.32.0.0
+ 
+<h2>Project:</h2>
+C:\Mich\tt\nRF5_SDK_14.0.0_3bcc1f7\examples\ble_central\blend_app_template_gps\pca10056\s140\arm5_no_packs\ble_app_uart_c_pca10056_s140.uvprojx
+Project File Date:  09/05/2018
+
+<h2>Output:</h2>
+*** Using Compiler 'V5.06 update 5 (build 528)', folder: 'C:\Keil_v5\ARM\ARMCC\Bin'
+Build target 'nrf52840_xxaa'
+compiling main.c...
+..\..\..\..\..\..\Adafruit_GPS\adafruit_gps.h(91): warning:  #1295-D: Deprecated declaration adafruit_gps_sleep - give arg types
+  
+ool adafruit_gps_sleep();
+..\..\..\..\..\..\Adafruit_GPS\adafruit_gps.h(92): warning:  #1295-D: Deprecated declaration adafruit_gps_wakeup - give arg types
+  
+ool adafruit_gps_wakeup();
+..\..\..\..\..\..\Adafruit_GPS\adafruit_gps.h(93): warning:  #1295-D: Deprecated declaration adafruit_get_last_position - give arg types
+  adafruit_position_t adafruit_get_last_position();
+..\..\..\..\..\..\Adafruit_GPS\adafruit_gps.h(94): warning:  #1295-D: Deprecated declaration adafruit_is_fix - give arg types
+  
+ool adafruit_is_fix();
+..\..\..\..\..\..\Adafruit_GPS\adafruit_gps.h(95): warning:  #1-D: last line of file ends without a newline
+  #endif
+..\..\..\main.c(445): warning:  #550-D: variable "j"  was set but never used
+  	int i =0, j =0;
+..\..\..\main.c(55): warning:  #550-D: variable "m_ble_nus_max_data_len"  was set but never used
+  static uint16_t m_ble_nus_max_data_len = BLE_GATT_ATT_MTU_DEFAULT - OPCODE_LENGTH - HANDLE_LENGTH; /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Nordic UART service module. */
+..\..\..\main.c(264): warning:  #177-D: function "application_timer_set"  was declared but never referenced
+  static void application_timer_set(void)
+..\..\..\main.c(274): warning:  #177-D: function "run_test"  was declared but never referenced
+  static void run_test(){
+..\..\..\main.c(293): warning:  #177-D: function "m_blend_handler"  was declared but never referenced
+  static void m_blend_handler(blend_evt_t * p_blend_evt)
+..\..\..\main.c: 10 warnings, 0 errors
+linking...
+Program Size: Code=23236 RO-data=1888 RW-data=420 ZI-data=21268  
+FromELF: creating hex file...
+".\_build\nrf52840_xxaa.axf" - 0 Error(s), 10 Warning(s).
+
+<h2>Software Packages used:</h2>
+
+Package Vendor: ARM
+                http://www.keil.com/pack/ARM.CMSIS.4.5.0.pack
+                ARM.CMSIS.4.5.0
+                CMSIS (Cortex Microcontroller Software Interface Standard)
+   * Component: CORE Version: 4.3.0
+
+Package Vendor: NordicSemiconductor
+                http://developer.nordicsemi.com/nRF5_SDK/pieces/nRF_DeviceFamilyPack/NordicSemiconductor.nRF_DeviceFamilyPack.8.14.1.pack
+                NordicSemiconductor.nRF_DeviceFamilyPack.8.14.1
+                Nordic Semiconductor nRF ARM devices Device Family Pack.
+   * Component: Startup Version: 8.14.1
+
+<h2>Collection of Component include folders:</h2>
+  .\RTE\_nrf52840_xxaa
+  C:\Keil_v5\ARM\PACK\ARM\CMSIS\4.5.0\CMSIS\Include
+  C:\Keil_v5\ARM\PACK\NordicSemiconductor\nRF_DeviceFamilyPack\8.14.1\Device\Include
+
+<h2>Collection of Component Files used:</h2>
+
+   * Component: NordicSemiconductor::Device:Startup:8.14.1
+      Include file:  Device\Include\system_nrf52840.h
+      Source file:   Device\Source\arm\arm_startup_nrf52840.s
+      Source file:   Device\Source\system_nrf52840.c
+
+   * Component: ARM::CMSIS:CORE:4.3.0
+Build Time Elapsed:  00:00:01
+</pre>
+</body>
+</html>
