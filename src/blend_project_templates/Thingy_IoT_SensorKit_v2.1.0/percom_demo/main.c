@@ -91,7 +91,7 @@
 
 #define PROTOCOL_ID 0x8B
 #define DEVICE_ID 0x01
-#define MAX_DEVICE 10
+#define MAX_DEVICE 30
 #define DATA_LENGTH 16
 #define NUM_ENABLED_SENSOR 3
 #define LOSING_PERIOD 2.5
@@ -99,8 +99,8 @@
 
 //! BLEnd parameters {Epoch, Adv. interval, mode}.
 const uint16_t lambda_ms = 4000;
-const uint16_t epoch_length_ms = 2430;
-const uint16_t adv_interval_ms = 106;
+const uint16_t epoch_length_ms = 1000;
+const uint16_t adv_interval_ms = 111;
 
 //! {protocol_id, node_id, cap_vec, demand_vec, shared_type, value1, value2}.
 uint8_t payload[DATA_LENGTH];
@@ -117,9 +117,8 @@ bool discover_mode = true;
 
 static const nrf_drv_twi_t m_twi_sensors = NRF_DRV_TWI_INSTANCE(TWI_SENSOR_INSTANCE);
 
-// batt
+/*!< Most recent read of battery level. */
 uint8_t batt_lvl_read = 0;
-
 /*!< List of nodes in the neighborhood(self-exclusive). */
 node_t* node_lst_head;
 /*!< Local node. */
@@ -133,6 +132,8 @@ uint8_t current_task_type;
 uint8_t prev_task_type;
 /*!< Current task result. */
 context_t saved_reading;
+/*!< Last lambda time. */
+uint64_t last_updated_lambda_ms;
 
 /* === Section (Function Prototypes) === */
 
@@ -337,11 +338,11 @@ uint32_t middleware_init(void) {
   localhost->demand_vec = 0xFFFF;
   localhost->next = NULL;
 
-  //node_lst_head = localhost;
-
   // Randomly assign a capapble task.
   current_task_type = rng_rand(0, 2) + TASK_OFFSET;
   prev_task_type = 0xff;
+
+  last_updated_lambda_ms = 0;
   
   return 0;
 }
@@ -405,7 +406,7 @@ decoded_packet_t decode(uint8_t * bytes) {
     uint16_t val2 = 0;
     val1 = bytes[7] + (bytes[8] << 8) + (bytes[9] << 16) + (bytes[10] << 24);
     //TODO(liuchg): Process the extended field for rich types.
-    uint32_t cur_time_ms = app_timer_cnt_get();
+    uint64_t cur_time_ms = APP_TIMER_MS(app_timer_cnt_get());
     context_t cur_context = {ngbr_id, ctx_type, val1, val2, cur_time_ms};
     decoded_packet_t decoded = {ngbr_id, ngbr_cap, ngbr_demand, ctx_valid, cur_context, cur_time_ms};
     return decoded;
@@ -446,7 +447,7 @@ uint32_t update_neighbor_list(decoded_packet_t* packet) {
     prev = NULL;
   }
 
-  uint32_t cur_time_ms = app_timer_cnt_get();
+  uint64_t cur_time_ms = APP_TIMER_MS(app_timer_cnt_get());
   while(cur) {
     if (cur->last_sync_ms + LOSING_PERIOD*lambda_ms < cur_time_ms) {
       if (prev) {
@@ -514,27 +515,12 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     break;
   }
   case BLEND_EVT_AFTER_SCAN: {
+    uint64_t cur_time_ms = APP_TIMER_MS(app_timer_cnt_get());
+    if (last_updated_lambda_ms > cur_time_ms - lambda_ms) {
+      return;
+    }
     update_neighbor_list(NULL);
 
-    // JH: sample code for sample, read, and to_string the context type.
-    /* context_sample(TEMP_CTX); */
-    /* context_sample(HUMID_CTX); */
-    /* context_sample(PRESS_CTX); */
-    /* context_sample(COLOR_CTX); */
-    /* context_t temp = context_read(TEMP_CTX); */
-    /* context_t humid = context_read(HUMID_CTX); */
-    /* context_t press = context_read(PRESS_CTX); */
-    /* context_t color = context_read(COLOR_CTX); */
-    /* char* x = malloc(sizeof(char) * 30); */
-    /* context2str(temp, x); */
-    /* NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x); */
-    /* context2str(humid, x); */
-    /* NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x); */
-    /* context2str(press, x); */
-    /* NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x); */
-    /* context2str(color, x); */
-    /* NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x); */
-    /* free(x); */
     // Update sensing task
     update_sensing_task();
     // Execute sensing task
@@ -546,6 +532,8 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     if (update_payload(saved_reading, payload)) {
       NRF_LOG_ERROR("Error when updating beacon payload.");
     }
+
+    last_updated_lambda_ms = cur_time_ms;
     break;
   }
   default: {
