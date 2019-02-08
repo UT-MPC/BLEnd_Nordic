@@ -59,7 +59,7 @@ static uint16_t m_ble_nus_max_data_len = BLE_GATT_ATT_MTU_DEFAULT - OPCODE_LENGT
 #define DATA_LENGTH 16
 #define NUM_ENABLED_SENSOR 3
 #define LOSING_PERIOD 2.5
-#define GPS_TASK_TYPE 6
+#define GPS_TASK_TYPE 7
 #define discover_index					1
 uint8_t payload[DATA_LENGTH] = {PROTOCOL_ID,
                                 DEVICE_ID,
@@ -312,11 +312,13 @@ static void set_blend_data()
 	m_blend_data.data = payload;
 
     payload[6] = GPS_TASK_TYPE;
-    uint8_t* vp = (uint8_t*) &(saved_location.longitude);
+    saved_location.latitude = -10.5;
+    uint8_t* vp = (uint8_t*) &(saved_location.latitude);
     for (int i = 0; i < 4; ++i) {
       payload[7+i] = vp[i];
     }
-    vp = (uint8_t*) &(saved_location.latitude);
+    saved_location.longitude = 115.6;
+    vp = (uint8_t*) &(saved_location.longitude);
     for (int i = 0; i < 4; ++i) {
       payload[11+i] = vp[i];
     }
@@ -336,11 +338,7 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
 	if (p_blend_evt->evt_id == BLEND_EVT_EPOCH_START)
 	{
         set_blend_data();
-		NRF_LOG_INFO("Epoch #%d started");
-
-	}
-	
-		
+	}		
 		
 }
 /**@brief   Function for handling app_uart events.
