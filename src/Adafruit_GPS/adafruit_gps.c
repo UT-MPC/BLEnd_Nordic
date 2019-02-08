@@ -2,6 +2,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "adafruit_gps.h"
+#include <string.h> 
+#include <stdlib.h>
 
 uint8_t _adafruit_hour, _adafruit_minute, _adafruit_seconds, _adafruit_year, _adafruit_month, _adafruit_day;
 uint16_t _adafruit_milliseconds;
@@ -298,7 +300,7 @@ bool adafruit_gps_wakeup()
 }
 
 adafruit_position_t adafruit_get_last_position(){
-	adafruit_position_t output = {_adafruit_latitude, _adafruit_longitude, _adafruit_altitude};
+	adafruit_position_t output = {_adafruit_latitudeDegrees, _adafruit_longitudeDegrees, _adafruit_altitude};
 	return output;
 }
 
