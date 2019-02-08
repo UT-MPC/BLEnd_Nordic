@@ -24,7 +24,10 @@ typedef enum
     TEMP_CTX,
     HUMID_CTX,
     PRESS_CTX,
-    COLOR_CTX
+    COLOR_CTX,
+    VOC_CTX,
+    LOCATION_CTX,
+    GPS_CTX,
 }ctx_type_def;
 
 /*! \brief Structure for context values.

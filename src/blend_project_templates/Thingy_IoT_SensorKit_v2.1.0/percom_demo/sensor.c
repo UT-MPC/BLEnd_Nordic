@@ -24,30 +24,29 @@ color_t _color_cache;
 
 static color_config_t m_color_config = COLOR_CONFIG_DEFAULT;
 
-void m_temperature2str(void* temp_p, char* str){
+void m_temperature2str(void* temp_p, char* str) {
   temperature_t temp_in = *((temperature_t*)temp_p);
   sprintf(str, "Temperature: %d.%d\'C", temp_in.integer, temp_in.decimal);
 }
 
-void m_humidity2str(void* humid_p, char* str){
+void m_humidity2str(void* humid_p, char* str) {
   humidity_t humid_in = *((humidity_t*)humid_p);
   sprintf(str, "Relative Humidity: %d%%", humid_in.humid);
 }
 
-void m_pressure2str(void* pressure_p, char* str){
+void m_pressure2str(void* pressure_p, char* str) {
   pressure_t pressure_in = *((pressure_t*)pressure_p);
   sprintf(str, "Pressure: %ld.%d hPa\r\n", pressure_in.integer, pressure_in.decimal);
 }
 
-void m_color2str(void* color_p, char* str){
+void m_color2str(void* color_p, char* str) {
   color_t color_in = *((color_t*)color_p);
   sprintf(str, "Color: (%d, %d, %d, %d) \r\n", color_in.red, color_in.green, color_in.blue, color_in.clear);
 }
 
 /**@brief Function for converting the temperature sample.
  */
-static void temperature_conv_data(float in_temp, temperature_t * p_out_temp)
-{
+static void temperature_conv_data(float in_temp, temperature_t * p_out_temp) {
   float f_decimal;
 
   p_out_temp->integer = (int8_t)in_temp;
@@ -59,8 +58,7 @@ static void temperature_conv_data(float in_temp, temperature_t * p_out_temp)
 
 /**@brief Function for converting the humidity sample.
  */
-static void humidity_conv_data(uint8_t humid, humidity_t * p_out_humid)
-{
+static void humidity_conv_data(uint8_t humid, humidity_t * p_out_humid) {
   p_out_humid->humid = (uint8_t)humid;
   p_out_humid->timestamp = app_timer_cnt_get();
   NRF_LOG_DEBUG("humidity_conv_data: Relative Humidity: ,%d,%%\r\n", humid);
@@ -69,8 +67,7 @@ static void humidity_conv_data(uint8_t humid, humidity_t * p_out_humid)
 
 /**@brief Function for converting the pressure sample.
  */
-static void pressure_conv_data(float in_press, pressure_t * p_out_press)
-{
+static void pressure_conv_data(float in_press, pressure_t * p_out_press) {
   float f_decimal;
 
   p_out_press->integer = (int32_t)in_press;
@@ -80,24 +77,26 @@ static void pressure_conv_data(float in_press, pressure_t * p_out_press)
   NRF_LOG_DEBUG("pressure_conv_data: Pressure: %d.%d hPa\r\n", p_out_press->integer, p_out_press->decimal);
 }
 
-void m_temperature_read(void** data_ptr){
+void m_temperature_read(void** data_ptr) {
   *data_ptr = &_temp_cache;
   return;
 }
-void m_humidity_read(void** data_ptr){
+void m_humidity_read(void** data_ptr) {
   *data_ptr = &_humid_cache;
   return;
 }
-void m_pressure_read(void** data_ptr){
+
+void m_pressure_read(void** data_ptr) {
   *data_ptr = &_pressure_cache;
   return;
 }
-void m_color_read(void** data_ptr){
+
+void m_color_read(void** data_ptr) {
   *data_ptr = &_color_cache;
   return;
 }
-void drv_humidity_evt_handler(drv_humidity_evt_t event)
-{
+
+void drv_humidity_evt_handler(drv_humidity_evt_t event) {
   uint32_t err_code;
   if (event == DRV_HUMIDITY_EVT_DATA)
   {
@@ -120,8 +119,8 @@ void drv_humidity_evt_handler(drv_humidity_evt_t event)
     APP_ERROR_CHECK_BOOL(false);
   }
 }
-static void drv_pressure_evt_handler(drv_pressure_evt_t const * p_event)
-{
+
+static void drv_pressure_evt_handler(drv_pressure_evt_t const * p_event) {
   switch (p_event->type)
   {
     case DRV_PRESSURE_EVT_DATA:
@@ -144,8 +143,7 @@ static void drv_pressure_evt_handler(drv_pressure_evt_t const * p_event)
 
 /**@brief Color sensor data handler.
  */
-static void drv_color_data_handler(drv_color_data_t const * p_data)
-{
+static void drv_color_data_handler(drv_color_data_t const * p_data) {
   (void)drv_ext_light_off(DRV_EXT_RGB_LED_SENSE);
 
   if (p_data != NULL)
@@ -158,8 +156,7 @@ static void drv_color_data_handler(drv_color_data_t const * p_data)
   }
 }
 
-uint32_t humidity_sensor_init(nrf_drv_twi_t const * p_twi_instance)
-{
+uint32_t humidity_sensor_init(nrf_drv_twi_t const * p_twi_instance) {
   ret_code_t  err_code = NRF_SUCCESS;
   
   static const nrf_drv_twi_config_t twi_config =
@@ -181,8 +178,8 @@ uint32_t humidity_sensor_init(nrf_drv_twi_t const * p_twi_instance)
   err_code = drv_humidity_init(&init_params);
   return err_code;
 }
-uint32_t pressure_sensor_init(const nrf_drv_twi_t * p_twi_instance)
-{
+
+uint32_t pressure_sensor_init(const nrf_drv_twi_t * p_twi_instance) {
   drv_pressure_init_t init_params;
 
   static const nrf_drv_twi_config_t twi_config =
@@ -202,8 +199,8 @@ uint32_t pressure_sensor_init(const nrf_drv_twi_t * p_twi_instance)
 
   return drv_pressure_init(&init_params);
 }
-uint32_t color_sensor_init(const nrf_drv_twi_t * p_twi_instance)
-{
+
+uint32_t color_sensor_init(const nrf_drv_twi_t * p_twi_instance) {
     uint32_t err_code;
     drv_color_init_t init_params;
 
@@ -225,8 +222,8 @@ uint32_t color_sensor_init(const nrf_drv_twi_t * p_twi_instance)
 
     return NRF_SUCCESS;
 }
-void m_color_sample(void)
-{
+
+void m_color_sample(void) {
   ret_code_t err_code;
   drv_ext_light_rgb_intensity_t color;
 
@@ -245,7 +242,7 @@ void m_color_sample(void)
 }
 
 
-void m_humidity_sample(){
+void m_humidity_sample() {
   ret_code_t err_code;
   err_code = drv_humidity_enable();
   APP_ERROR_CHECK(err_code);
@@ -253,8 +250,8 @@ void m_humidity_sample(){
   err_code = drv_humidity_sample();
   APP_ERROR_CHECK(err_code);
 }
-void m_pressure_sample()
-{
+
+void m_pressure_sample() {
   uint32_t err_code;
 
   err_code = drv_pressure_enable();
@@ -263,16 +260,16 @@ void m_pressure_sample()
   err_code = drv_pressure_sample();
   APP_ERROR_CHECK(err_code);
 }
-uint32_t m_humidity_disable(){
+
+uint32_t m_humidity_disable() {
   return drv_humidity_disable();
 }
 
-uint32_t m_pressure_disable(){
+uint32_t m_pressure_disable() {
   return drv_pressure_disable();
 }
 
-uint32_t m_color_disable()
-{
+uint32_t m_color_disable() {
   uint32_t err_code;
 
   (void)drv_ext_light_off(DRV_EXT_RGB_LED_SENSE);
