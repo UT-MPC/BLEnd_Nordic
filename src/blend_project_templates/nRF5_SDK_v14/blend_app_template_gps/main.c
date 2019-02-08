@@ -49,8 +49,8 @@ BLE_DB_DISCOVERY_DEF(m_db_disc);                                        /**< DB 
 
 //! BLEnd parameters {Epoch, Adv. interval, mode}.
 const uint16_t lambda_ms = 4000;
-const uint16_t epoch_length_ms = 2430;
-const uint16_t adv_interval_ms = 106;
+const uint16_t epoch_length_ms = 1000;
+const uint16_t adv_interval_ms = 111;
 
 static uint16_t m_ble_nus_max_data_len = BLE_GATT_ATT_MTU_DEFAULT - OPCODE_LENGTH - HANDLE_LENGTH; /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Nordic UART service module. */
 #define PROTOCOL_ID 0x8B
