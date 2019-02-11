@@ -518,11 +518,11 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     }
     update_neighbor_list(NULL);
 
-    context_sample(VOC_CTX);
-    context_t voc = context_read(VOC_CTX); 
-    char* x = malloc(sizeof(char) * 30); 
-    context2str(voc, x); 
-    NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x); 
+    // context_sample(VOC_CTX);
+    // context_t voc = context_read(VOC_CTX); 
+    // char* x = malloc(sizeof(char) * 30); 
+    // context2str(voc, x); 
+    // NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x); 
 
     // Update sensing task
     update_sensing_task();
