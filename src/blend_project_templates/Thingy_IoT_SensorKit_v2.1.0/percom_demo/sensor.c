@@ -17,10 +17,19 @@
 #include "blend.h"
 
 
+drv_gas_sensor_mode_t m_gas_mode = DRV_GAS_SENSOR_MODE_1S;
+
+static gas_state_t m_gas_state = GAS_STATE_IDLE;
+static m_gas_baseline_t     * m_p_baseline;     ///< Baseline pointer.
+static const m_gas_baseline_t m_default_baseline = GAS_BASELINE_DEFAULT; ///< Default baseline.
+
+
 temperature_t _temp_cache;
 humidity_t _humid_cache;
 pressure_t _pressure_cache;
 color_t _color_cache;
+gas_t _gas_cache;
+
 
 static color_config_t m_color_config = COLOR_CONFIG_DEFAULT;
 
@@ -42,6 +51,11 @@ void m_pressure2str(void* pressure_p, char* str) {
 void m_color2str(void* color_p, char* str) {
   color_t color_in = *((color_t*)color_p);
   sprintf(str, "Color: (%d, %d, %d, %d) \r\n", color_in.red, color_in.green, color_in.blue, color_in.clear);
+}
+
+void m_gas2str(void* gas_p, char* str) {
+  gas_t gas_in = *((gas_t*)gas_p);
+  sprintf(str, "Total VOC: (CO2:%d, TVOC:%d) \r\n", gas_in.ec02_ppm, gas_in.tvoc_ppb);
 }
 
 /**@brief Function for converting the temperature sample.
@@ -93,6 +107,11 @@ void m_pressure_read(void** data_ptr) {
 
 void m_color_read(void** data_ptr) {
   *data_ptr = &_color_cache;
+  return;
+}
+
+void m_gas_read(void** data_ptr) {
+  *data_ptr = &_gas_cache;
   return;
 }
 
@@ -155,6 +174,42 @@ static void drv_color_data_handler(drv_color_data_t const * p_data) {
     _color_cache.timestamp = app_timer_cnt_get();
   }
 }
+/**@brief Gas sensor data handler.
+ */
+void drv_gas_evt_handler(drv_gas_sensor_data_t const * p_data)
+{
+  if (p_data != NULL)
+  {
+    _gas_cache.ec02_ppm = p_data->ec02_ppm;
+    _gas_cache.tvoc_ppb = p_data->tvoc_ppb;
+    _gas_cache.timestamp = app_timer_cnt_get();
+  }
+}
+
+uint32_t gas_sensor_init(const nrf_drv_twi_t * p_twi_instance)
+{
+    uint32_t       err_code;
+    drv_gas_init_t init_params;
+
+    static const nrf_drv_twi_config_t twi_config =
+    {
+        .scl                = TWI_SCL,
+        .sda                = TWI_SDA,
+        .frequency          = NRF_TWI_FREQ_400K,
+        .interrupt_priority = APP_IRQ_PRIORITY_LOW
+    };
+
+    init_params.p_twi_instance = p_twi_instance;
+    init_params.p_twi_cfg      = &twi_config;
+    init_params.twi_addr       = CCS811_ADDR;
+    init_params.data_handler   = drv_gas_evt_handler;
+
+    err_code = drv_gas_sensor_init(&init_params);
+    RETURN_IF_ERROR(err_code);
+
+    return NRF_SUCCESS;
+}
+
 
 uint32_t humidity_sensor_init(nrf_drv_twi_t const * p_twi_instance) {
   ret_code_t  err_code = NRF_SUCCESS;
@@ -261,6 +316,21 @@ void m_pressure_sample() {
   APP_ERROR_CHECK(err_code);
 }
 
+void m_gas_sample(){
+  uint32_t err_code;
+  err_code = drv_gas_sensor_start(m_gas_mode);
+  RETURN_IF_ERROR(err_code);
+
+  m_gas_state = GAS_STATE_WARMUP;
+
+  // return app_timer_start(gas_calib_timer_id,
+  //                         APP_TIMER_TICKS(M_GAS_BASELINE_WRITE_MS),
+  //                         NULL);
+}
+
+
+
+
 uint32_t m_humidity_disable() {
   return drv_humidity_disable();
 }
@@ -278,4 +348,22 @@ uint32_t m_color_disable() {
   APP_ERROR_CHECK(err_code);
 
   return NRF_SUCCESS;
+}
+
+uint32_t m_gas_disable(){
+  uint32_t err_code;
+  uint16_t baseline;
+
+  if (m_gas_state == GAS_STATE_ACTIVE)
+  {
+      // err_code = drv_gas_sensor_baseline_get(&baseline);
+      // RETURN_IF_ERROR(err_code);
+
+      // err_code = gas_store_baseline_flash(baseline);
+      // RETURN_IF_ERROR(err_code);
+  }
+
+    m_gas_state = GAS_STATE_IDLE;
+
+    return drv_gas_sensor_stop();
 }

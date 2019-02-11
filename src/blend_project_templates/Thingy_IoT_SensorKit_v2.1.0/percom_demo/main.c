@@ -490,9 +490,6 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
   case BLEND_EVT_ADV_REPORT: {
     uint8_t * p_data = p_blend_evt->evt_data.data;
     uint8_t plen = p_blend_evt->evt_data.data_length;
-    // JH: plen here is not the actual length of the data. Since BLEnd does not have a 
-    // byte to denote length, all the data length is the maximum length which is 26 here.
-    //if (p_data[0] != PROTOCOL_ID || plen != DATA_LENGTH) {
     if (p_data[0] != PROTOCOL_ID) {
       break;
     }
@@ -521,6 +518,12 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     }
     update_neighbor_list(NULL);
 
+    context_sample(VOC_CTX);
+    context_t voc = context_read(VOC_CTX); 
+    char* x = malloc(sizeof(char) * 30); 
+    context2str(voc, x); 
+    NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x); 
+
     // Update sensing task
     update_sensing_task();
     // Execute sensing task
@@ -547,6 +550,7 @@ void sensor_init()
   humidity_sensor_init(&m_twi_sensors);
   pressure_sensor_init(&m_twi_sensors);
   color_sensor_init(&m_twi_sensors);
+  gas_sensor_init(&m_twi_sensors);
 }
 static void m_batt_meas_handler(m_batt_meas_event_t const * p_batt_meas_event)
 {
