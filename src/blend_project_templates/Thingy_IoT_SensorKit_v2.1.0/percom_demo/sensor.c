@@ -156,6 +156,25 @@ static void drv_color_data_handler(drv_color_data_t const * p_data) {
   }
 }
 
+/**@brief Accumulate the average noise level of each frame (256 samples) and average the result from 33 frames.
+ */
+static uint32_t drv_mic_data_handler(m_audio_frame_t * p_frame)
+{
+  static int counter = 0;
+  static float acc_noise_level = 0;
+  if (counter++ < 32) {
+    float noise_level = ((float *)p_frame->data)[0];
+    acc_noise_level += noise_level;
+  }
+  else {
+    float avg_noise_level = acc_noise_level/ (float)counter;
+    NRF_LOG_DEBUG("drv_mic_data_handler: average noise_level = " NRF_LOG_FLOAT_MARKER ", audio frames  = %d \r\n: ", NRF_LOG_FLOAT(avg_noise_level), (counter * p_frame->data_size));
+    counter = 0;
+    acc_noise_level = 0;
+  }
+    return NRF_SUCCESS;
+}
+
 uint32_t humidity_sensor_init(nrf_drv_twi_t const * p_twi_instance) {
   ret_code_t  err_code = NRF_SUCCESS;
   
@@ -223,6 +242,10 @@ uint32_t color_sensor_init(const nrf_drv_twi_t * p_twi_instance) {
     return NRF_SUCCESS;
 }
 
+uint32_t mic_init() {
+  return drv_mic_init(drv_mic_data_handler);
+}
+
 void m_color_sample(void) {
   ret_code_t err_code;
   drv_ext_light_rgb_intensity_t color;
@@ -241,7 +264,6 @@ void m_color_sample(void) {
 
 }
 
-
 void m_humidity_sample() {
   ret_code_t err_code;
   err_code = drv_humidity_enable();
@@ -258,6 +280,20 @@ void m_pressure_sample() {
   APP_ERROR_CHECK(err_code);
 
   err_code = drv_pressure_sample();
+  APP_ERROR_CHECK(err_code);
+}
+
+void m_mic_start() {
+  uint32_t err_code;
+
+  err_code = drv_mic_start();
+  APP_ERROR_CHECK(err_code);
+}
+
+void m_mic_stop() {
+  uint32_t err_code;
+
+  err_code = drv_mic_stop();
   APP_ERROR_CHECK(err_code);
 }
 
