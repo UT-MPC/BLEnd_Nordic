@@ -4,9 +4,11 @@
 
 #include "app_timer.h"
 #include "app_util_platform.h"
+#include "blend.h"
 #include "drv_color.h"
 #include "drv_gas_sensor.h"
 #include "drv_humidity.h"
+#include "drv_mic.h"
 #include "drv_pressure.h"
 #include "fstorage.h"
 #include "m_ui.h"
@@ -14,8 +16,8 @@
 #include "nrf_delay.h"
 #include "nrf_log.h"
 #include "pca20020.h"
-#include "blend.h"
 
+#define SOUND_LEVEL_SAMPLE_SIZE 33
 
 drv_gas_sensor_mode_t m_gas_mode = DRV_GAS_SENSOR_MODE_1S;
 
@@ -29,6 +31,7 @@ humidity_t _humid_cache;
 pressure_t _pressure_cache;
 color_t _color_cache;
 gas_t _gas_cache;
+sound_t _sound_cache;
 
 
 static color_config_t m_color_config = COLOR_CONFIG_DEFAULT;
@@ -56,6 +59,12 @@ void m_color2str(void* color_p, char* str) {
 void m_gas2str(void* gas_p, char* str) {
   gas_t gas_in = *((gas_t*)gas_p);
   sprintf(str, "Total VOC: (CO2:%d, TVOC:%d) \r\n", gas_in.ec02_ppm, gas_in.tvoc_ppb);
+}
+
+void m_sound2str(void* sound_p, char* str) {
+  sound_t sound_in = *((sound_t*)sound_p);
+  //sprintf(str, "Average noise level: " NRF_LOG_FLOAT_MARKER " \r\n", NRF_LOG_FLOAT(sound_in.sound_level));
+  sprintf(str, "Average noise level: %.3f \r\n", sound_in.sound_level);
 }
 
 /**@brief Function for converting the temperature sample.
@@ -113,6 +122,10 @@ void m_color_read(void** data_ptr) {
 void m_gas_read(void** data_ptr) {
   *data_ptr = &_gas_cache;
   return;
+}
+
+void m_sound_read(void** data_ptr) {
+  *data_ptr = &_sound_cache;
 }
 
 void drv_humidity_evt_handler(drv_humidity_evt_t event) {
@@ -174,6 +187,7 @@ static void drv_color_data_handler(drv_color_data_t const * p_data) {
     _color_cache.timestamp = app_timer_cnt_get();
   }
 }
+
 /**@brief Gas sensor data handler.
  */
 void drv_gas_evt_handler(drv_gas_sensor_data_t const * p_data)
@@ -184,6 +198,27 @@ void drv_gas_evt_handler(drv_gas_sensor_data_t const * p_data)
     _gas_cache.tvoc_ppb = p_data->tvoc_ppb;
     _gas_cache.timestamp = app_timer_cnt_get();
   }
+}
+
+/**@brief Accumulate the average noise level of each frame (256 samples) and average the result from 33 frames.
+ */
+static uint32_t drv_mic_data_handler(m_audio_frame_t * p_frame)
+{
+  static int counter = 0;
+  static float acc_noise_level = 0;
+  if (++counter < SOUND_LEVEL_SAMPLE_SIZE) {
+    float noise_level = ((float *)p_frame->data)[0];
+    acc_noise_level += noise_level;
+  }
+  else {
+    float avg_noise_level = acc_noise_level/ (float)counter;
+    //NRF_LOG_DEBUG("drv_mic_data_handler: average noise_level = " NRF_LOG_FLOAT_MARKER ", audio frames  = %d \r\n: ", NRF_LOG_FLOAT(avg_noise_level), (counter * p_frame->data_size));
+    counter = 0;
+    acc_noise_level = 0;
+    _sound_cache.sound_level = avg_noise_level;
+    _sound_cache.timestamp = app_timer_cnt_get();
+  }
+  return NRF_SUCCESS;
 }
 
 uint32_t gas_sensor_init(const nrf_drv_twi_t * p_twi_instance)
@@ -207,26 +242,6 @@ uint32_t gas_sensor_init(const nrf_drv_twi_t * p_twi_instance)
     err_code = drv_gas_sensor_init(&init_params);
     RETURN_IF_ERROR(err_code);
 
-    return NRF_SUCCESS;
-}
-
-
-/**@brief Accumulate the average noise level of each frame (256 samples) and average the result from 33 frames.
- */
-static uint32_t drv_mic_data_handler(m_audio_frame_t * p_frame)
-{
-  static int counter = 0;
-  static float acc_noise_level = 0;
-  if (counter++ < 32) {
-    float noise_level = ((float *)p_frame->data)[0];
-    acc_noise_level += noise_level;
-  }
-  else {
-    float avg_noise_level = acc_noise_level/ (float)counter;
-    NRF_LOG_DEBUG("drv_mic_data_handler: average noise_level = " NRF_LOG_FLOAT_MARKER ", audio frames  = %d \r\n: ", NRF_LOG_FLOAT(avg_noise_level), (counter * p_frame->data_size));
-    counter = 0;
-    acc_noise_level = 0;
-  }
     return NRF_SUCCESS;
 }
 
@@ -297,7 +312,7 @@ uint32_t color_sensor_init(const nrf_drv_twi_t * p_twi_instance) {
     return NRF_SUCCESS;
 }
 
-uint32_t mic_init() {
+uint32_t sound_init() {
   return drv_mic_init(drv_mic_data_handler);
 }
 
@@ -350,18 +365,17 @@ void m_gas_sample(){
   //                         NULL);
 }
 
-void m_mic_start() {
+void m_sound_sample() {
   uint32_t err_code;
-
   err_code = drv_mic_start();
   APP_ERROR_CHECK(err_code);
 }
 
-void m_mic_stop() {
+uint32_t m_sound_disable() {
   uint32_t err_code;
-
   err_code = drv_mic_stop();
   APP_ERROR_CHECK(err_code);
+  return NRF_SUCCESS;
 }
 
 uint32_t m_humidity_disable() {

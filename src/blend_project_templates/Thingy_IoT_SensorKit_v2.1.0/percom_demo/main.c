@@ -93,7 +93,7 @@
 #define DEVICE_ID 0x01
 #define MAX_DEVICE 30
 #define DATA_LENGTH 16
-#define NUM_ENABLED_SENSOR 6
+#define NUM_ENABLED_SENSOR 7
 #define LOSING_PERIOD 2.5
 #define BATT_READ_INTERVAL_MS 600000    //10min
 
@@ -109,7 +109,7 @@ blend_data_t m_blend_data;
 
 static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
 
-static const ble_uis_led_t led_colors[6] = {LED_CONFIG_WHITE, LED_CONFIG_YELLOW, LED_CONFIG_GREEN, LED_CONFIG_PURPLE, LED_CONFIG_BLUE, LED_CONFIG_RED};
+static const ble_uis_led_t led_colors[7] = {LED_CONFIG_WHITE, LED_CONFIG_YELLOW, LED_CONFIG_GREEN, LED_CONFIG_PURPLE, LED_CONFIG_BLUE, LED_CONFIG_PINK, LED_CONFIG_RED};
 
 uint8_t on_scan_flag  = 0;
 uint8_t discovered = 0;
@@ -332,11 +332,11 @@ uint32_t middleware_init(void) {
   localhost->node_id = DEVICE_ID;
   // TODO(liuchg): randomized init. for capabilities.
   localhost->cap_vec = 0;
-  SetBit(localhost->cap_vec, 0);
-  SetBit(localhost->cap_vec, 1);
-  SetBit(localhost->cap_vec, 2);
-  SetBit(localhost->cap_vec, 3);
-  SetBit(localhost->cap_vec, 4);
+  /* SetBit(localhost->cap_vec, 0); */
+  /* SetBit(localhost->cap_vec, 1); */
+  /* SetBit(localhost->cap_vec, 2); */
+  /* SetBit(localhost->cap_vec, 3); */
+  SetBit(localhost->cap_vec, 5);
   localhost->demand_vec = 0xFFFF;
   localhost->next = NULL;
 
@@ -520,12 +520,6 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     }
     update_neighbor_list(NULL);
 
-    // context_start(VOC_CTX);
-    // context_t voc = context_read(VOC_CTX); 
-    // char* x = malloc(sizeof(char) * 30); 
-    // context2str(voc, x); 
-    // NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x); 
-
     // Update sensing task
     update_sensing_task();
     // Execute sensing task
@@ -553,7 +547,9 @@ void sensor_init()
   pressure_sensor_init(&m_twi_sensors);
   color_sensor_init(&m_twi_sensors);
   gas_sensor_init(&m_twi_sensors);
+  sound_init();
 }
+
 static void m_batt_meas_handler(m_batt_meas_event_t const * p_batt_meas_event)
 {
   NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN"Voltage: %d V, Charge: %d %%, Event type: %d \r\n",
@@ -579,6 +575,7 @@ static void m_batt_meas_handler(m_batt_meas_event_t const * p_batt_meas_event)
     }
   }
 }
+
 void batt_init(){
   uint32_t err_code;
   batt_meas_init_t         batt_meas_init = BATT_MEAS_PARAM_CFG;

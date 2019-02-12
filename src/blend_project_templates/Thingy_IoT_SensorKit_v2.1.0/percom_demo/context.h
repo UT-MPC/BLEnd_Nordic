@@ -26,6 +26,7 @@ typedef enum
     PRESS_CTX,
     COLOR_CTX,
     VOC_CTX,
+    NOISE_CTX,
     LOCATION_CTX,
 }ctx_type_def;
 
