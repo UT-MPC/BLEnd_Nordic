@@ -480,8 +480,9 @@ void scan_timer_handler(void* p_context) {
   APP_ERROR_CHECK(err_code);
   _blend_sent_beacon_count = 0;
   beacon_count_set (_blend_sent_beacon_count);
-  advertising_start();
-	
+  // advertising_start();
+	beacon_slack_timer_handler();
+
   //Call blend handler
   blend_evt_t new_blend_evt;
   new_blend_evt.evt_id = BLEND_EVT_AFTER_SCAN;
@@ -501,11 +502,10 @@ void half_epoch_timer_handler (void* p_context) {
     new_blend_evt.evt_id = BLEND_EVT_EPOCH_START;
     new_blend_evt.evt_data.data = NULL;
     new_blend_evt.evt_data.data_length = 0;
-    (*_blend_evt_handler) ( &new_blend_evt);
-		
     scan_prepare();
     err_code=app_timer_stop(beacon_count_timer);
     APP_ERROR_CHECK(err_code);
+    (*_blend_evt_handler) ( &new_blend_evt);
   } else {
     _epoch_flag = 0;
   }
