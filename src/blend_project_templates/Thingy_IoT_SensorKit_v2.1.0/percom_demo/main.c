@@ -93,7 +93,7 @@
 #define DEVICE_ID 0x01
 #define MAX_DEVICE 30
 #define DATA_LENGTH 16
-#define NUM_ENABLED_SENSOR 3
+#define NUM_ENABLED_SENSOR 6
 #define LOSING_PERIOD 2.5
 #define BATT_READ_INTERVAL_MS 600000    //10min
 
@@ -335,6 +335,8 @@ uint32_t middleware_init(void) {
   SetBit(localhost->cap_vec, 0);
   SetBit(localhost->cap_vec, 1);
   SetBit(localhost->cap_vec, 2);
+  SetBit(localhost->cap_vec, 3);
+  SetBit(localhost->cap_vec, 4);
   localhost->demand_vec = 0xFFFF;
   localhost->next = NULL;
 
@@ -373,7 +375,7 @@ uint32_t execute_sensing_task(void) {
     return 0;
   }
   // JH: The code below is only a testbed for Christine to create the Android code.
-  context_sample(current_task_type - TASK_OFFSET);
+  context_start(current_task_type - TASK_OFFSET);
   saved_reading = context_read(current_task_type - TASK_OFFSET);
   return 0;
 }
@@ -518,7 +520,7 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     }
     update_neighbor_list(NULL);
 
-    // context_sample(VOC_CTX);
+    // context_start(VOC_CTX);
     // context_t voc = context_read(VOC_CTX); 
     // char* x = malloc(sizeof(char) * 30); 
     // context2str(voc, x); 

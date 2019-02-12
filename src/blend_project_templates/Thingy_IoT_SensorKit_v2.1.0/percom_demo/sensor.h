@@ -71,6 +71,7 @@ typedef struct
 
 typedef void (*sensor_read_func_t)(void **);
 typedef void (*sensor_sample_func_t)();
+typedef uint32_t (*sensor_disable_func_t) ();
 typedef void (*sensor2str_func_t)(void*, char*);
 
 // Initialize humidity sensor
