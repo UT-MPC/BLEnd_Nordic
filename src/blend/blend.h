@@ -28,7 +28,7 @@
 
 #define	APP_TIMER_MS(TICKS) TICKS*(1000 * (APP_TIMER_CONFIG_RTC_FREQUENCY + 1))/(uint64_t) APP_TIMER_CLOCK_FREQ
 
-#define ONE_BEACON_MS					10
+#define ONE_BEACON_MS					5
 
 /**
  * Internal error codes used in Blend.

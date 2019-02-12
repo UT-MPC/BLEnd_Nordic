@@ -27,7 +27,6 @@ typedef enum
     COLOR_CTX,
     VOC_CTX,
     LOCATION_CTX,
-    GPS_CTX,
 }ctx_type_def;
 
 /*! \brief Structure for context values.
@@ -54,8 +53,10 @@ typedef struct {
 typedef void (*sensor2ctx_func_t) (void* , context_t*);
 typedef void (*ctx2sensor_func_t) (context_t* , void**);
 
-void context_sample(uint8_t ctx_tye);
+void context_start(uint8_t ctx_tye);
 context_t context_read(uint8_t ctx_tye);
+uint32_t context_stop(uint8_t ctx_type);
+void context_pause(uint8_t ctx_tye);
 
 /*
   @brief Convert a context to string. The char* passed in must 

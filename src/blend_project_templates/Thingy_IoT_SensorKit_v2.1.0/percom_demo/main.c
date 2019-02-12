@@ -93,7 +93,7 @@
 #define DEVICE_ID 0x01
 #define MAX_DEVICE 30
 #define DATA_LENGTH 16
-#define NUM_ENABLED_SENSOR 3
+#define NUM_ENABLED_SENSOR 6
 #define LOSING_PERIOD 2.5
 #define BATT_READ_INTERVAL_MS 600000    //10min
 
@@ -335,6 +335,8 @@ uint32_t middleware_init(void) {
   SetBit(localhost->cap_vec, 0);
   SetBit(localhost->cap_vec, 1);
   SetBit(localhost->cap_vec, 2);
+  SetBit(localhost->cap_vec, 3);
+  SetBit(localhost->cap_vec, 4);
   localhost->demand_vec = 0xFFFF;
   localhost->next = NULL;
 
@@ -373,7 +375,7 @@ uint32_t execute_sensing_task(void) {
     return 0;
   }
   // JH: The code below is only a testbed for Christine to create the Android code.
-  context_sample(current_task_type - TASK_OFFSET);
+  context_start(current_task_type - TASK_OFFSET);
   saved_reading = context_read(current_task_type - TASK_OFFSET);
   return 0;
 }
@@ -490,9 +492,6 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
   case BLEND_EVT_ADV_REPORT: {
     uint8_t * p_data = p_blend_evt->evt_data.data;
     uint8_t plen = p_blend_evt->evt_data.data_length;
-    // JH: plen here is not the actual length of the data. Since BLEnd does not have a 
-    // byte to denote length, all the data length is the maximum length which is 26 here.
-    //if (p_data[0] != PROTOCOL_ID || plen != DATA_LENGTH) {
     if (p_data[0] != PROTOCOL_ID) {
       break;
     }
@@ -521,6 +520,12 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     }
     update_neighbor_list(NULL);
 
+    // context_start(VOC_CTX);
+    // context_t voc = context_read(VOC_CTX); 
+    // char* x = malloc(sizeof(char) * 30); 
+    // context2str(voc, x); 
+    // NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x); 
+
     // Update sensing task
     update_sensing_task();
     // Execute sensing task
@@ -547,6 +552,7 @@ void sensor_init()
   humidity_sensor_init(&m_twi_sensors);
   pressure_sensor_init(&m_twi_sensors);
   color_sensor_init(&m_twi_sensors);
+  gas_sensor_init(&m_twi_sensors);
 }
 static void m_batt_meas_handler(m_batt_meas_event_t const * p_batt_meas_event)
 {

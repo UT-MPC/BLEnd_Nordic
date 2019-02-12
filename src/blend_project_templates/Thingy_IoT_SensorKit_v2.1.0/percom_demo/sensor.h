@@ -41,44 +41,74 @@ typedef struct
 
 typedef struct
 {
-    uint8_t  led_red;
-    uint8_t  led_green;
-    uint8_t  led_blue;
+  uint16_t ec02_ppm; ///< The equivalent CO2 (eCO2) value in parts per million (ppm).
+	uint16_t tvoc_ppb; ///< The Total Volatile Organic Compound (TVOC) value in parts per billion (ppb).
+  uint32_t timestamp;
+} gas_t;
+
+typedef struct
+{
+  uint8_t  led_red;
+  uint8_t  led_green;
+  uint8_t  led_blue;
 } color_config_t;
+
+typedef enum
+{
+  GAS_STATE_IDLE,
+  GAS_STATE_WARMUP,
+  GAS_STATE_ACTIVE
+}gas_state_t;
+
+typedef struct
+{
+  uint16_t mode_250ms;
+  uint16_t mode_1s;
+  uint16_t mode_10s;
+  uint16_t mode_60s;
+} m_gas_baseline_t;
+
 
 typedef void (*sensor_read_func_t)(void **);
 typedef void (*sensor_sample_func_t)();
+typedef uint32_t (*sensor_disable_func_t) ();
 typedef void (*sensor2str_func_t)(void*, char*);
 
 // Initialize humidity sensor
 uint32_t humidity_sensor_init(nrf_drv_twi_t const* p_twi_instance);
 uint32_t pressure_sensor_init(const nrf_drv_twi_t * p_twi_instance);
 uint32_t color_sensor_init(const nrf_drv_twi_t * p_twi_instance);
+uint32_t gas_sensor_init(const nrf_drv_twi_t * p_twi_instance);
 
 
 void m_humidity_sample();
 void m_pressure_sample();
 void m_color_sample();
-
+void m_gas_sample();
 
 void m_temperature_read(void**);
 void m_humidity_read(void**);
 void m_pressure_read(void** );
 void m_color_read(void** );
+void m_gas_read(void** );
 
 void m_temperature2str(void* , char*);
 void m_humidity2str(void* , char*);
 void m_pressure2str(void* , char*);
 void m_color2str(void* , char*);
+void m_gas2str(void* , char*);
 
 uint32_t m_humidity_disable();
 uint32_t m_pressure_disable();
 uint32_t m_color_disable();
+uint32_t m_gas_disable();
+
 
 extern temperature_t _temp_cache;
 extern humidity_t _humid_cache;
 extern pressure_t _pressure_cache;
 extern color_t _color_cache;
+extern gas_t _gas_cache;
 
 #define COLOR_CONFIG_DEFAULT {        \
   .led_red             = 103,         \
@@ -86,3 +116,10 @@ extern color_t _color_cache;
   .led_blue            = 29           \
 }
 #endif    // _UTMPCBLEND_H
+
+#define GAS_BASELINE_DEFAULT {      \
+  .mode_250ms = 0,                    \
+  .mode_1s    = 0,                    \
+  .mode_10s   = 0,                    \
+  .mode_60s   = 0,                    \
+}
