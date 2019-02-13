@@ -17,14 +17,13 @@
 #include "nrf_log.h"
 #include "pca20020.h"
 
-#define SOUND_LEVEL_SAMPLE_SIZE 33
-
-drv_gas_sensor_mode_t m_gas_mode = DRV_GAS_SENSOR_MODE_1S;
+#define SOUND_LEVEL_SAMPLE_SIZE 33 //33*16ms
 
 static gas_state_t m_gas_state = GAS_STATE_IDLE;
 static m_gas_baseline_t     * m_p_baseline;     ///< Baseline pointer.
 static const m_gas_baseline_t m_default_baseline = GAS_BASELINE_DEFAULT; ///< Default baseline.
 
+drv_gas_sensor_mode_t m_gas_mode = DRV_GAS_SENSOR_MODE_1S;
 
 temperature_t _temp_cache;
 humidity_t _humid_cache;
@@ -32,6 +31,10 @@ pressure_t _pressure_cache;
 color_t _color_cache;
 gas_t _gas_cache;
 sound_t _sound_cache;
+
+int counter = 0;
+float acc_noise_level = 0;
+int acc_num_frames = 0;
 
 
 static color_config_t m_color_config = COLOR_CONFIG_DEFAULT;
@@ -64,7 +67,7 @@ void m_gas2str(void* gas_p, char* str) {
 void m_sound2str(void* sound_p, char* str) {
   sound_t sound_in = *((sound_t*)sound_p);
   //sprintf(str, "Average noise level: " NRF_LOG_FLOAT_MARKER " \r\n", NRF_LOG_FLOAT(sound_in.sound_level));
-  sprintf(str, "Average noise level: %.3f \r\n", sound_in.sound_level);
+  sprintf(str, "Average sound level: %.3f \r\n", sound_in.sound_level);
 }
 
 /**@brief Function for converting the temperature sample.
@@ -202,21 +205,21 @@ void drv_gas_evt_handler(drv_gas_sensor_data_t const * p_data)
 
 /**@brief Accumulate the average noise level of each frame (256 samples) and average the result from 33 frames.
  */
-static uint32_t drv_mic_data_handler(m_audio_frame_t * p_frame)
+uint32_t drv_mic_data_handler(m_audio_frame_t * p_frame)
 {
-  static int counter = 0;
-  static float acc_noise_level = 0;
-  if (++counter < SOUND_LEVEL_SAMPLE_SIZE) {
-    float noise_level = ((float *)p_frame->data)[0];
-    acc_noise_level += noise_level;
-  }
-  else {
+  
+  float noise_level = ((float *)p_frame->data)[0];
+  acc_noise_level += noise_level;
+  acc_num_frames += p_frame->data_size;
+  
+  if (++counter >= SOUND_LEVEL_SAMPLE_SIZE) {
     float avg_noise_level = acc_noise_level/ (float)counter;
-    //NRF_LOG_DEBUG("drv_mic_data_handler: average noise_level = " NRF_LOG_FLOAT_MARKER ", audio frames  = %d \r\n: ", NRF_LOG_FLOAT(avg_noise_level), (counter * p_frame->data_size));
-    counter = 0;
-    acc_noise_level = 0;
     _sound_cache.sound_level = avg_noise_level;
     _sound_cache.timestamp = app_timer_cnt_get();
+    //NRF_LOG_DEBUG("drv_mic_data_handler: average noise_level = " NRF_LOG_FLOAT_MARKER ", num. of frames  = %d \r\n: ", NRF_LOG_FLOAT(_sound_cache.sound_level), acc_num_frames);
+    counter = 0;
+    acc_noise_level = 0;
+    acc_num_frames = 0;
   }
   return NRF_SUCCESS;
 }

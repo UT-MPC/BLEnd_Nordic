@@ -137,6 +137,11 @@ uint64_t last_updated_lambda_ms;
 
 /* === Section (Function Prototypes) === */
 
+/*!< Sensing related functions */
+uint32_t update_sensing_task(void);
+uint32_t execute_sensing_task(void);
+uint32_t read_sensing_result(void);
+
 /*!< AfterScan as in Stacon */
 bool compare_snapshots(void);
 uint8_t take_snapshot(void);
@@ -289,10 +294,16 @@ uint32_t rng_rand(int start,int end) {
  */
 uint32_t update_payload(context_t context_in, uint8_t* payload) {
   // For debug purpose
-  /* char* x = malloc(sizeof(char) * 30); */
-  /* context2str(context_in, x); */
-  /* NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN "Encoding context: %s.\r\n", (uint32_t)x); */
-  /* free(x); */
+  /* if (current_task_type == (NOISE_CTX + TASK_OFFSET)) { */
+  /*   float val = 0; */
+  /*   memcpy(&val, &context_in.value1, sizeof(uint32_t)); */
+  /*   NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN "Encoding noise context: " NRF_LOG_FLOAT_MARKER ".\n", NRF_LOG_FLOAT(val)); */
+  /* } else { */
+  /*   char* x = malloc(sizeof(char) * 30); */
+  /*   context2str(context_in, x); */
+  /*   NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN "Encoding context: %s.\r\n", (uint32_t)x); */
+  /*   free(x); */
+  /* } */
   
   //uint8_t sharing_type, uint32_t ctx_val1, uint32_t ctx_val2, uint8_t* payload
   payload[0] = PROTOCOL_ID;
@@ -365,18 +376,31 @@ uint32_t update_sensing_task(void) {
     NRF_LOG_DEBUG("Context task selected: Idle (%d, l_id:%d).\r\n", current_task_type, l_id);
     current_task_type = TASK_IDLE;
   }
+  
+  //TODO: Disable the sensor for context type switch.
+  
   return 0;
 }
 
-/**@brief Query the sensor and update the shared context, if current task is valid.
+/**@brief Query the sensor, if current task is valid.
  */
 uint32_t execute_sensing_task(void) {
   if (current_task_type < TASK_OFFSET) {
     return 0;
   }
-  // JH: The code below is only a testbed for Christine to create the Android code.
   context_start(current_task_type - TASK_OFFSET);
+  return 0;
+}
+
+/**@brief Retrieve the sensor reading and update the shared context, if current task is valid.
+ * @details context_read might pause the sampling process if necessary.
+ */
+uint32_t read_sensing_result(void) {
+  if (current_task_type < TASK_OFFSET) {
+    return 0;
+  }
   saved_reading = context_read(current_task_type - TASK_OFFSET);
+  context_pause(current_task_type - TASK_OFFSET);
   return 0;
 }
 
@@ -511,6 +535,12 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     break;
     }
   case BLEND_EVT_EPOCH_START: {
+    uint64_t cur_time_ms = APP_TIMER_MS(app_timer_cnt_get());
+    if (last_updated_lambda_ms > cur_time_ms - lambda_ms) {
+      return;
+    }
+    //TODO(urgent): Move the read operation to the last beacon when the callback is implemented.
+    read_sensing_result();
     break;
   }
   case BLEND_EVT_AFTER_SCAN: {

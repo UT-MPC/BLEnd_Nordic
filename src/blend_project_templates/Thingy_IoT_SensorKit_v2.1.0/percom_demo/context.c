@@ -47,14 +47,15 @@ void ctx2gas(context_t* context_in, void** sensor_p) {
 
 void sound2ctx(void* sound_in, context_t* context_out) {
   sound_t sound = *((sound_t*)sound_in);
+  memcpy(&context_out->value1, &sound.sound_level, sizeof(uint32_t));
   context_out->timestamp_ms = sound.timestamp;
-  context_out->value1 = (uint32_t)sound.sound_level;
 }
 
 void ctx2sound(context_t* context_in, void** sensor_p) {
   sound_t* sound_p;
   sound_p = malloc(sizeof(sound_t));
-  sound_p->sound_level = (float)context_in->value1;
+  memcpy(&sound_p->sound_level, &context_in->value1, sizeof(uint32_t));
+  //  sound_p->sound_level = (float)context_in->value1;
   sound_p->timestamp = context_in->timestamp_ms;
   *sensor_p = sound_p;
 }
