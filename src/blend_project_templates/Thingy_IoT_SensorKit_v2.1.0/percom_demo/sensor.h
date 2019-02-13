@@ -15,18 +15,18 @@
 typedef struct {
   int8_t  integer;
   uint8_t decimal;
-  uint32_t timestamp; //TODO: Add time unit to all related fields.
+  uint32_t timestamp_ms;
 } temperature_t;
 
 typedef struct {
   uint8_t humid;
-  uint32_t timestamp;
+  uint32_t timestamp_ms;
 }humidity_t;
 
 typedef struct {
   int32_t  integer;
   uint8_t  decimal;
-  uint32_t timestamp;
+  uint32_t timestamp_ms;
 } pressure_t;
 
 typedef struct {
@@ -34,13 +34,13 @@ typedef struct {
   uint16_t green;
   uint16_t blue;
   uint16_t clear;
-  uint32_t timestamp;
+  uint32_t timestamp_ms;
 } color_t;
 
 typedef struct {
   uint16_t ec02_ppm; ///< The equivalent CO2 (eCO2) value in parts per million (ppm).
   uint16_t tvoc_ppb; ///< The Total Volatile Organic Compound (TVOC) value in parts per billion (ppb).
-  uint32_t timestamp;
+  uint32_t timestamp_ms;
 } gas_t;
 
 typedef struct {
@@ -57,7 +57,7 @@ typedef enum {
 
 typedef struct {
   float sound_level;
-  uint32_t timestamp;
+  uint32_t timestamp_ms;
 } sound_t;
 
 typedef struct

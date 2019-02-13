@@ -78,7 +78,7 @@ static void temperature_conv_data(float in_temp, temperature_t * p_out_temp) {
   p_out_temp->integer = (int8_t)in_temp;
   f_decimal = in_temp - p_out_temp->integer;
   p_out_temp->decimal = (uint8_t)(f_decimal * 100.0f);
-  p_out_temp->timestamp = app_timer_cnt_get();
+  p_out_temp->timestamp_ms = APP_TIMER_MS(app_timer_cnt_get());
   NRF_LOG_DEBUG("temperature_conv_data: Temperature: ,%d.%d,C\r\n", p_out_temp->integer, p_out_temp->decimal);
 }
 
@@ -86,7 +86,7 @@ static void temperature_conv_data(float in_temp, temperature_t * p_out_temp) {
  */
 static void humidity_conv_data(uint8_t humid, humidity_t * p_out_humid) {
   p_out_humid->humid = (uint8_t)humid;
-  p_out_humid->timestamp = app_timer_cnt_get();
+  p_out_humid->timestamp_ms = APP_TIMER_MS(app_timer_cnt_get());
   NRF_LOG_DEBUG("humidity_conv_data: Relative Humidity: ,%d,%%\r\n", humid);
 }
 
@@ -99,7 +99,7 @@ static void pressure_conv_data(float in_press, pressure_t * p_out_press) {
   p_out_press->integer = (int32_t)in_press;
   f_decimal = in_press - p_out_press->integer;
   p_out_press->decimal = (uint8_t)(f_decimal * 100.0f);
-  p_out_press->timestamp = app_timer_cnt_get();
+  p_out_press->timestamp_ms = APP_TIMER_MS(app_timer_cnt_get());
   NRF_LOG_DEBUG("pressure_conv_data: Pressure: %d.%d hPa\r\n", p_out_press->integer, p_out_press->decimal);
 }
 
@@ -187,7 +187,7 @@ static void drv_color_data_handler(drv_color_data_t const * p_data) {
     _color_cache.green = p_data->green;
     _color_cache.blue  = p_data->blue;
     _color_cache.clear = p_data->clear;
-    _color_cache.timestamp = app_timer_cnt_get();
+    _color_cache.timestamp_ms = APP_TIMER_MS(app_timer_cnt_get());
   }
 }
 
@@ -199,7 +199,7 @@ void drv_gas_evt_handler(drv_gas_sensor_data_t const * p_data)
   {
     _gas_cache.ec02_ppm = p_data->ec02_ppm;
     _gas_cache.tvoc_ppb = p_data->tvoc_ppb;
-    _gas_cache.timestamp = app_timer_cnt_get();
+    _gas_cache.timestamp_ms = APP_TIMER_MS(app_timer_cnt_get());
   }
 }
 
@@ -215,7 +215,7 @@ uint32_t drv_mic_data_handler(m_audio_frame_t * p_frame)
   if (++counter >= SOUND_LEVEL_SAMPLE_SIZE) {
     float avg_noise_level = acc_noise_level/ (float)counter;
     _sound_cache.sound_level = avg_noise_level;
-    _sound_cache.timestamp = app_timer_cnt_get();
+    _sound_cache.timestamp_ms = APP_TIMER_MS(app_timer_cnt_get());
     //NRF_LOG_DEBUG("drv_mic_data_handler: average noise_level = " NRF_LOG_FLOAT_MARKER ", num. of frames  = %d \r\n: ", NRF_LOG_FLOAT(_sound_cache.sound_level), acc_num_frames);
     counter = 0;
     acc_noise_level = 0;
