@@ -536,7 +536,7 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     }
   case BLEND_EVT_EPOCH_START: {
     uint64_t cur_time_ms = APP_TIMER_MS(app_timer_cnt_get());
-    if (last_updated_lambda_ms > cur_time_ms - lambda_ms) {
+    if (last_updated_lambda_ms + lambda_ms > cur_time_ms && last_updated_lambda_ms > 0) {
       return;
     }
     //TODO(urgent): Move the read operation to the last beacon when the callback is implemented.
@@ -545,7 +545,7 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
   }
   case BLEND_EVT_AFTER_SCAN: {
     uint64_t cur_time_ms = APP_TIMER_MS(app_timer_cnt_get());
-    if (last_updated_lambda_ms > cur_time_ms - lambda_ms) {
+    if (last_updated_lambda_ms + lambda_ms > cur_time_ms && last_updated_lambda_ms > 0) {
       return;
     }
     update_neighbor_list(NULL);
