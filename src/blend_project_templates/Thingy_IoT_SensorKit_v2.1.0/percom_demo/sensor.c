@@ -4,7 +4,6 @@
 
 #include "app_timer.h"
 #include "app_util_platform.h"
-#include "blend.h"
 #include "drv_color.h"
 #include "drv_gas_sensor.h"
 #include "drv_humidity.h"
@@ -16,6 +15,7 @@
 #include "nrf_delay.h"
 #include "nrf_log.h"
 #include "pca20020.h"
+#define	APP_TIMER_MS(TICKS) TICKS*(1000 * (APP_TIMER_CONFIG_RTC_FREQUENCY + 1))/(uint64_t) APP_TIMER_CLOCK_FREQ
 
 #define SOUND_LEVEL_SAMPLE_SIZE 33 //33*16ms
 

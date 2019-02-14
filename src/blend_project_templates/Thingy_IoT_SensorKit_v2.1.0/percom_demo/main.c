@@ -535,7 +535,7 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     break;
     }
   case BLEND_EVT_EPOCH_START: {
-    uint64_t cur_time_ms = APP_TIMER_MS(app_timer_cnt_get());
+    uint64_t cur_time_ms = _BLEND_APP_TIMER_MS(app_timer_cnt_get());
     if (last_updated_lambda_ms + lambda_ms > cur_time_ms && last_updated_lambda_ms > 0) {
       return;
     }
