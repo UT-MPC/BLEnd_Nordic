@@ -151,22 +151,23 @@ add_blend_src()
 
 add_gps_mod()
 {
-    echo -e "\nAdding Adafruit GPS control source to the SDK..."
-    if [ ! -d "${GPS_SRC_DIR}" ]; then
-	echo " Error. Source directory doesn't exist."
-	exit 1
-    fi
-    if [ ! -d "${SDK_PATH}" ]; then
-	echo " Error. SDK directory doesn't exist."
-	exit 1
-    fi
+    if [ ${SDK_VERSION} -lt 2 ]; then
+	echo -e "\nAdding Adafruit GPS control source to the SDK..."
+	if [ ! -d "${GPS_SRC_DIR}" ]; then
+	    echo " Error. Source directory doesn't exist."
+	    exit 1
+	fi
+	if [ ! -d "${SDK_PATH}" ]; then
+	    echo " Error. SDK directory doesn't exist."
+	    exit 1
+	fi
 
-    cp -r "${GPS_SRC_DIR}" "${SDK_PATH}"
+	cp -r "${GPS_SRC_DIR}" "${SDK_PATH}"
 
-    if [ -d "${SDK_PATH}/Adafruit_GPS" ]; then
-	echo " Done."
+	if [ -d "${SDK_PATH}/Adafruit_GPS" ]; then
+	    echo " Done."
+	fi
     fi
-
 }
 add_template_project()
 {
