@@ -81,3 +81,17 @@
         }					\
       }						\
   }
+
+#define LED_CONFIG_PINK				\
+  {						\
+    .mode = BLE_UIS_LED_MODE_CONST,		\
+      .data =					\
+      {						\
+        .mode_const =				\
+        {					\
+	  .r  = 182,				\
+	  .g  = 60,				\
+	  .b  = 135,				\
+        }					\
+      }						\
+  }

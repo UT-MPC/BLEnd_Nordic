@@ -50,6 +50,7 @@
 #define CONFIG_AUDIO_CODEC_ADPCM    1
 #define CONFIG_AUDIO_CODEC_BV32FP   2
 #define CONFIG_AUDIO_CODEC_OPUS     3
+#define CONFIG_AUDIO_CODEC_SOUND_LEVEL 4
 
 // OPUS modes:
 #define CONFIG_OPUS_MODE_CELT       (1 << 0)
@@ -75,7 +76,7 @@
 // <i> Opus - highly advanced and configurable codec. High memory consumption. CPU consumption depends on the settings. Runs at 16-64 kbit/s. Allows for very power-efficient configuration.
 //     <1=>ADPCM
 //     <2=>BV32FP
-#define CONFIG_AUDIO_CODEC 1
+#define CONFIG_AUDIO_CODEC 4
 
 // <q> Enable Equalizer
 // <i> Enable the software equalizer. The equalizer characteristic is defined in the drv_audio_dsp.c file.
@@ -90,7 +91,7 @@
 //     <128=>128 Samples (8 ms)
 //     <256=>256 Samples (16 ms)
 //     <512=>512 Samples (32 ms)
-#if (CONFIG_AUDIO_CODEC == CONFIG_AUDIO_CODEC_ADPCM)
+#if ((CONFIG_AUDIO_CODEC == CONFIG_AUDIO_CODEC_ADPCM) || (CONFIG_AUDIO_CODEC == CONFIG_AUDIO_CODEC_SOUND_LEVEL))
 #define CONFIG_AUDIO_FRAME_SIZE_SAMPLES 256
 #endif /* CONFIG_AUDIO_CODEC == CONFIG_AUDIO_CODEC_ADPCM */
 // </h>
@@ -168,7 +169,7 @@
 // </h>
 
 // Calculate audio parameters:
-#if (CONFIG_AUDIO_CODEC == CONFIG_AUDIO_CODEC_ADPCM)
+#if ((CONFIG_AUDIO_CODEC == CONFIG_AUDIO_CODEC_ADPCM) || (CONFIG_AUDIO_CODEC == CONFIG_AUDIO_CODEC_SOUND_LEVEL))
 # define CONFIG_AUDIO_FRAME_SIZE_BYTES      ((CONFIG_AUDIO_FRAME_SIZE_SAMPLES / 2) + 3)
 #elif (CONFIG_AUDIO_CODEC == CONFIG_AUDIO_CODEC_BV32FP)
 # define CONFIG_AUDIO_FRAME_SIZE_SAMPLES    80

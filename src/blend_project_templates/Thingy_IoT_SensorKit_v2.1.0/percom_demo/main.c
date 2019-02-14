@@ -93,7 +93,7 @@
 #define DEVICE_ID 0x01
 #define MAX_DEVICE 30
 #define DATA_LENGTH 16
-#define NUM_ENABLED_SENSOR 6
+#define NUM_ENABLED_SENSOR 7
 #define LOSING_PERIOD 2.5
 #define BATT_READ_INTERVAL_MS 600000    //10min
 
@@ -109,7 +109,7 @@ blend_data_t m_blend_data;
 
 static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
 
-static const ble_uis_led_t led_colors[6] = {LED_CONFIG_WHITE, LED_CONFIG_YELLOW, LED_CONFIG_GREEN, LED_CONFIG_PURPLE, LED_CONFIG_BLUE, LED_CONFIG_RED};
+static const ble_uis_led_t led_colors[7] = {LED_CONFIG_WHITE, LED_CONFIG_YELLOW, LED_CONFIG_GREEN, LED_CONFIG_PURPLE, LED_CONFIG_BLUE, LED_CONFIG_PINK, LED_CONFIG_RED};
 
 uint8_t on_scan_flag  = 0;
 uint8_t discovered = 0;
@@ -136,6 +136,11 @@ context_t saved_reading;
 uint64_t last_updated_lambda_ms;
 
 /* === Section (Function Prototypes) === */
+
+/*!< Sensing related functions */
+uint32_t update_sensing_task(void);
+uint32_t execute_sensing_task(void);
+uint32_t read_sensing_result(void);
 
 /*!< AfterScan as in Stacon */
 bool compare_snapshots(void);
@@ -289,10 +294,16 @@ uint32_t rng_rand(int start,int end) {
  */
 uint32_t update_payload(context_t context_in, uint8_t* payload) {
   // For debug purpose
-  /* char* x = malloc(sizeof(char) * 30); */
-  /* context2str(context_in, x); */
-  /* NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN "Encoding context: %s.\r\n", (uint32_t)x); */
-  /* free(x); */
+  /* if (current_task_type == (NOISE_CTX + TASK_OFFSET)) { */
+  /*   float val = 0; */
+  /*   memcpy(&val, &context_in.value1, sizeof(uint32_t)); */
+  /*   NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN "Encoding noise context: " NRF_LOG_FLOAT_MARKER ".\n", NRF_LOG_FLOAT(val)); */
+  /* } else { */
+  /*   char* x = malloc(sizeof(char) * 30); */
+  /*   context2str(context_in, x); */
+  /*   NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN "Encoding context: %s.\r\n", (uint32_t)x); */
+  /*   free(x); */
+  /* } */
   
   //uint8_t sharing_type, uint32_t ctx_val1, uint32_t ctx_val2, uint8_t* payload
   payload[0] = PROTOCOL_ID;
@@ -332,11 +343,11 @@ uint32_t middleware_init(void) {
   localhost->node_id = DEVICE_ID;
   // TODO(liuchg): randomized init. for capabilities.
   localhost->cap_vec = 0;
-  SetBit(localhost->cap_vec, 0);
-  SetBit(localhost->cap_vec, 1);
-  SetBit(localhost->cap_vec, 2);
-  SetBit(localhost->cap_vec, 3);
-  SetBit(localhost->cap_vec, 4);
+  /* SetBit(localhost->cap_vec, 0); */
+  /* SetBit(localhost->cap_vec, 1); */
+  /* SetBit(localhost->cap_vec, 2); */
+  /* SetBit(localhost->cap_vec, 3); */
+  SetBit(localhost->cap_vec, 5);
   localhost->demand_vec = 0xFFFF;
   localhost->next = NULL;
 
@@ -365,18 +376,31 @@ uint32_t update_sensing_task(void) {
     NRF_LOG_DEBUG("Context task selected: Idle (%d, l_id:%d).\r\n", current_task_type, l_id);
     current_task_type = TASK_IDLE;
   }
+  
+  //TODO: Disable the sensor for context type switch.
+  
   return 0;
 }
 
-/**@brief Query the sensor and update the shared context, if current task is valid.
+/**@brief Query the sensor, if current task is valid.
  */
 uint32_t execute_sensing_task(void) {
   if (current_task_type < TASK_OFFSET) {
     return 0;
   }
-  // JH: The code below is only a testbed for Christine to create the Android code.
   context_start(current_task_type - TASK_OFFSET);
+  return 0;
+}
+
+/**@brief Retrieve the sensor reading and update the shared context, if current task is valid.
+ * @details context_read might pause the sampling process if necessary.
+ */
+uint32_t read_sensing_result(void) {
+  if (current_task_type < TASK_OFFSET) {
+    return 0;
+  }
   saved_reading = context_read(current_task_type - TASK_OFFSET);
+  context_pause(current_task_type - TASK_OFFSET);
   return 0;
 }
 
@@ -488,7 +512,6 @@ uint32_t udpate_context_pool(decoded_packet_t* packet) {
 
 static void m_blend_handler(blend_evt_t * p_blend_evt)
 {
-  // NRF_LOG_INFO("!!!!!!!!!!!%d", p_blend_evt->evt_id);
   switch (p_blend_evt->evt_id) {
   case BLEND_EVT_ADV_REPORT: {
     uint8_t * p_data = p_blend_evt->evt_data.data;
@@ -512,20 +535,20 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     break;
     }
   case BLEND_EVT_EPOCH_START: {
+    uint64_t cur_time_ms = APP_TIMER_MS(app_timer_cnt_get());
+    if (last_updated_lambda_ms + lambda_ms > cur_time_ms && last_updated_lambda_ms > 0) {
+      return;
+    }
+    //TODO(urgent): Move the read operation to the last beacon when the callback is implemented.
+    read_sensing_result();
     break;
   }
   case BLEND_EVT_AFTER_SCAN: {
     uint64_t cur_time_ms = _BLEND_APP_TIMER_MS(app_timer_cnt_get());
-    if (last_updated_lambda_ms > cur_time_ms - lambda_ms) {
+    if (last_updated_lambda_ms + lambda_ms > cur_time_ms && last_updated_lambda_ms > 0) {
       return;
     }
     update_neighbor_list(NULL);
-
-    // context_start(VOC_CTX);
-    // context_t voc = context_read(VOC_CTX); 
-    // char* x = malloc(sizeof(char) * 30); 
-    // context2str(voc, x); 
-    // NRF_LOG_INFO("Read context: %s\r\n", (uint32_t)x); 
 
     // Update sensing task
     update_sensing_task();
@@ -555,7 +578,9 @@ void sensor_init()
   pressure_sensor_init(&m_twi_sensors);
   color_sensor_init(&m_twi_sensors);
   gas_sensor_init(&m_twi_sensors);
+  sound_init();
 }
+
 static void m_batt_meas_handler(m_batt_meas_event_t const * p_batt_meas_event)
 {
   NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN"Voltage: %d V, Charge: %d %%, Event type: %d \r\n",
@@ -581,6 +606,7 @@ static void m_batt_meas_handler(m_batt_meas_event_t const * p_batt_meas_event)
     }
   }
 }
+
 void batt_init(){
   uint32_t err_code;
   batt_meas_init_t         batt_meas_init = BATT_MEAS_PARAM_CFG;

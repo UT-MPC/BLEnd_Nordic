@@ -4,9 +4,11 @@
 
 #include "app_timer.h"
 #include "app_util_platform.h"
+#include "blend.h"
 #include "drv_color.h"
 #include "drv_gas_sensor.h"
 #include "drv_humidity.h"
+#include "drv_mic.h"
 #include "drv_pressure.h"
 #include "fstorage.h"
 #include "m_ui.h"
@@ -14,21 +16,25 @@
 #include "nrf_delay.h"
 #include "nrf_log.h"
 #include "pca20020.h"
-#include "blend.h"
 
-
-drv_gas_sensor_mode_t m_gas_mode = DRV_GAS_SENSOR_MODE_1S;
+#define SOUND_LEVEL_SAMPLE_SIZE 33 //33*16ms
 
 static gas_state_t m_gas_state = GAS_STATE_IDLE;
 static m_gas_baseline_t     * m_p_baseline;     ///< Baseline pointer.
 static const m_gas_baseline_t m_default_baseline = GAS_BASELINE_DEFAULT; ///< Default baseline.
 
+drv_gas_sensor_mode_t m_gas_mode = DRV_GAS_SENSOR_MODE_1S;
 
 temperature_t _temp_cache;
 humidity_t _humid_cache;
 pressure_t _pressure_cache;
 color_t _color_cache;
 gas_t _gas_cache;
+sound_t _sound_cache;
+
+int counter = 0;
+float acc_noise_level = 0;
+int acc_num_frames = 0;
 
 
 static color_config_t m_color_config = COLOR_CONFIG_DEFAULT;
@@ -58,6 +64,12 @@ void m_gas2str(void* gas_p, char* str) {
   sprintf(str, "Total VOC: (CO2:%d, TVOC:%d) \r\n", gas_in.ec02_ppm, gas_in.tvoc_ppb);
 }
 
+void m_sound2str(void* sound_p, char* str) {
+  sound_t sound_in = *((sound_t*)sound_p);
+  //sprintf(str, "Average noise level: " NRF_LOG_FLOAT_MARKER " \r\n", NRF_LOG_FLOAT(sound_in.sound_level));
+  sprintf(str, "Average sound level: %.3f \r\n", sound_in.sound_level);
+}
+
 /**@brief Function for converting the temperature sample.
  */
 static void temperature_conv_data(float in_temp, temperature_t * p_out_temp) {
@@ -66,7 +78,7 @@ static void temperature_conv_data(float in_temp, temperature_t * p_out_temp) {
   p_out_temp->integer = (int8_t)in_temp;
   f_decimal = in_temp - p_out_temp->integer;
   p_out_temp->decimal = (uint8_t)(f_decimal * 100.0f);
-  p_out_temp->timestamp = app_timer_cnt_get();
+  p_out_temp->timestamp_ms = APP_TIMER_MS(app_timer_cnt_get());
   NRF_LOG_DEBUG("temperature_conv_data: Temperature: ,%d.%d,C\r\n", p_out_temp->integer, p_out_temp->decimal);
 }
 
@@ -74,7 +86,7 @@ static void temperature_conv_data(float in_temp, temperature_t * p_out_temp) {
  */
 static void humidity_conv_data(uint8_t humid, humidity_t * p_out_humid) {
   p_out_humid->humid = (uint8_t)humid;
-  p_out_humid->timestamp = app_timer_cnt_get();
+  p_out_humid->timestamp_ms = APP_TIMER_MS(app_timer_cnt_get());
   NRF_LOG_DEBUG("humidity_conv_data: Relative Humidity: ,%d,%%\r\n", humid);
 }
 
@@ -87,7 +99,7 @@ static void pressure_conv_data(float in_press, pressure_t * p_out_press) {
   p_out_press->integer = (int32_t)in_press;
   f_decimal = in_press - p_out_press->integer;
   p_out_press->decimal = (uint8_t)(f_decimal * 100.0f);
-  p_out_press->timestamp = app_timer_cnt_get();
+  p_out_press->timestamp_ms = APP_TIMER_MS(app_timer_cnt_get());
   NRF_LOG_DEBUG("pressure_conv_data: Pressure: %d.%d hPa\r\n", p_out_press->integer, p_out_press->decimal);
 }
 
@@ -113,6 +125,10 @@ void m_color_read(void** data_ptr) {
 void m_gas_read(void** data_ptr) {
   *data_ptr = &_gas_cache;
   return;
+}
+
+void m_sound_read(void** data_ptr) {
+  *data_ptr = &_sound_cache;
 }
 
 void drv_humidity_evt_handler(drv_humidity_evt_t event) {
@@ -171,9 +187,10 @@ static void drv_color_data_handler(drv_color_data_t const * p_data) {
     _color_cache.green = p_data->green;
     _color_cache.blue  = p_data->blue;
     _color_cache.clear = p_data->clear;
-    _color_cache.timestamp = app_timer_cnt_get();
+    _color_cache.timestamp_ms = APP_TIMER_MS(app_timer_cnt_get());
   }
 }
+
 /**@brief Gas sensor data handler.
  */
 void drv_gas_evt_handler(drv_gas_sensor_data_t const * p_data)
@@ -182,8 +199,29 @@ void drv_gas_evt_handler(drv_gas_sensor_data_t const * p_data)
   {
     _gas_cache.ec02_ppm = p_data->ec02_ppm;
     _gas_cache.tvoc_ppb = p_data->tvoc_ppb;
-    _gas_cache.timestamp = app_timer_cnt_get();
+    _gas_cache.timestamp_ms = APP_TIMER_MS(app_timer_cnt_get());
   }
+}
+
+/**@brief Accumulate the average noise level of each frame (256 samples) and average the result from 33 frames.
+ */
+uint32_t drv_mic_data_handler(m_audio_frame_t * p_frame)
+{
+  
+  float noise_level = ((float *)p_frame->data)[0];
+  acc_noise_level += noise_level;
+  acc_num_frames += p_frame->data_size;
+  
+  if (++counter >= SOUND_LEVEL_SAMPLE_SIZE) {
+    float avg_noise_level = acc_noise_level/ (float)counter;
+    _sound_cache.sound_level = avg_noise_level;
+    _sound_cache.timestamp_ms = APP_TIMER_MS(app_timer_cnt_get());
+    //NRF_LOG_DEBUG("drv_mic_data_handler: average noise_level = " NRF_LOG_FLOAT_MARKER ", num. of frames  = %d \r\n: ", NRF_LOG_FLOAT(_sound_cache.sound_level), acc_num_frames);
+    counter = 0;
+    acc_noise_level = 0;
+    acc_num_frames = 0;
+  }
+  return NRF_SUCCESS;
 }
 
 uint32_t gas_sensor_init(const nrf_drv_twi_t * p_twi_instance)
@@ -209,7 +247,6 @@ uint32_t gas_sensor_init(const nrf_drv_twi_t * p_twi_instance)
 
     return NRF_SUCCESS;
 }
-
 
 uint32_t humidity_sensor_init(nrf_drv_twi_t const * p_twi_instance) {
   ret_code_t  err_code = NRF_SUCCESS;
@@ -278,6 +315,10 @@ uint32_t color_sensor_init(const nrf_drv_twi_t * p_twi_instance) {
     return NRF_SUCCESS;
 }
 
+uint32_t sound_init() {
+  return drv_mic_init(drv_mic_data_handler);
+}
+
 void m_color_sample(void) {
   ret_code_t err_code;
   drv_ext_light_rgb_intensity_t color;
@@ -295,7 +336,6 @@ void m_color_sample(void) {
   APP_ERROR_CHECK(err_code);
 
 }
-
 
 void m_humidity_sample() {
   ret_code_t err_code;
@@ -328,8 +368,18 @@ void m_gas_sample(){
   //                         NULL);
 }
 
+void m_sound_sample() {
+  uint32_t err_code;
+  err_code = drv_mic_start();
+  APP_ERROR_CHECK(err_code);
+}
 
-
+uint32_t m_sound_disable() {
+  uint32_t err_code;
+  err_code = drv_mic_stop();
+  APP_ERROR_CHECK(err_code);
+  return NRF_SUCCESS;
+}
 
 uint32_t m_humidity_disable() {
   return drv_humidity_disable();

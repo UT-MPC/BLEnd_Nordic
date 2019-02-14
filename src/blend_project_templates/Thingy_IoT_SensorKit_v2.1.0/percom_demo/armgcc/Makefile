@@ -43,6 +43,7 @@ $(abspath ../../../sdk_components/nfc/t2t_lib/nfc_t2t_lib_gcc.a) \
 #source common to all targets
 C_SOURCE_FILES += \
 $(abspath ../context.c) \
+$(abspath ../drv_audio_sound_level.c) \
 $(abspath ../hungarian.c) \
 $(abspath ../main.c) \
 $(abspath ../matching.c) \
