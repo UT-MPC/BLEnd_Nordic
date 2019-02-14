@@ -24,6 +24,9 @@ $> ./setup.sh
 ($> run SDK setup script in the downloaded directory)
 ```
 
+### Specify blend parameters
+See ```blend_param_t```
+
 ### Percom Demo (Stacon):
 > Run the setup script with option **2** and then check out `sdk/Nordic-Thingy52-FW-2.1.0/project/percom_demo`.
 
@@ -87,16 +90,5 @@ _BLEnd Scheduler_
   pages={105--116},
   year={2017},
   organization={ACM}
-}
-```
-
-_Stacon_
-```
-@inproceedings{liu2019stacon,
-  title={Stacon: Self-Stabilizing Context Neighborhood for Mobile IoT Devices},
-  author={Liu, Chenguang and Hua, Jie and Hu, Changyong and Julien, Christine},
-  booktitle={Proceedings of the 17th IEEE International Conference on Pervasive Computing and Communications Workshops (PerCom Workshops)},
-  year={2019},
-  organization={IEEE}
 }
 ```
