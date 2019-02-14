@@ -1,11 +1,12 @@
 #include "context.h"
 
-#include "app_timer.h"
-#include "sensor.h"
 #include <string.h>
 #include <stdlib.h>
+
+#include "app_timer.h"
 #include "nrf_log.h"
 #include "pca20020.h"
+#include "sensor.h"
 
 void temp2ctx(void* temp_in, context_t* context_out);
 void humid2ctx(void* temp_in, context_t* context_out);
@@ -141,11 +142,13 @@ context_t context_read(uint8_t ctx_type){
 }
 
 void context_start(uint8_t ctx_type){
+  //NRF_LOG_DEBUG("context_start: %d\r\n", ctx_type);
   sensor_start_func[ctx_type]();
   return;
 }
 
 void context_pause(uint8_t ctx_type){
+  //NRF_LOG_DEBUG("context_pause: %d\r\n", ctx_type);
   if ((ctx_type == LOCATION_CTX) || (ctx_type == VOC_CTX)){
     return;
   }
@@ -153,6 +156,7 @@ void context_pause(uint8_t ctx_type){
 }
 
 uint32_t context_stop(uint8_t ctx_type){
+  //NRF_LOG_DEBUG("context_stop: %d\r\n", ctx_type);
   return sensor_stop_func[ctx_type]();
 }
 

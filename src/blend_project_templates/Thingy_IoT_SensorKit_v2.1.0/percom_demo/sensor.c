@@ -216,7 +216,7 @@ uint32_t drv_mic_data_handler(m_audio_frame_t * p_frame)
     float avg_noise_level = acc_noise_level/ (float)counter;
     _sound_cache.sound_level = avg_noise_level;
     _sound_cache.timestamp_ms = APP_TIMER_MS(app_timer_cnt_get());
-    //NRF_LOG_DEBUG("drv_mic_data_handler: average noise_level = " NRF_LOG_FLOAT_MARKER ", num. of frames  = %d \r\n: ", NRF_LOG_FLOAT(_sound_cache.sound_level), acc_num_frames);
+    NRF_LOG_DEBUG("drv_mic_data_handler (%d ms): average noise_level = " NRF_LOG_FLOAT_MARKER ", num. of frames  = %d \r\n: ", _sound_cache.timestamp_ms, NRF_LOG_FLOAT(_sound_cache.sound_level), acc_num_frames);
     counter = 0;
     acc_noise_level = 0;
     acc_num_frames = 0;

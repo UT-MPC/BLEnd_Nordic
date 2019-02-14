@@ -99,13 +99,13 @@
 
 //! BLEnd parameters {Epoch, Adv. interval, mode}.
 const uint16_t lambda_ms = 4000;
-const uint16_t epoch_length_ms = 1000;
-const uint16_t adv_interval_ms = 111;
+const uint16_t epoch_length_ms = 1327;
+const uint16_t adv_interval_ms = 127;
 
 //! {protocol_id, node_id, cap_vec, demand_vec, shared_type, value1, value2}.
 uint8_t payload[DATA_LENGTH];
 
-blend_data_t m_blend_data;		
+blend_data_t m_blend_data;
 
 static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
 
@@ -114,6 +114,7 @@ static const ble_uis_led_t led_colors[7] = {LED_CONFIG_WHITE, LED_CONFIG_YELLOW,
 uint8_t on_scan_flag  = 0;
 uint8_t discovered = 0;
 bool discover_mode = true;
+bool sample_initiated = false;
 
 static const nrf_drv_twi_t m_twi_sensors = NRF_DRV_TWI_INSTANCE(TWI_SENSOR_INSTANCE);
 
@@ -139,8 +140,9 @@ uint64_t last_updated_lambda_ms;
 
 /*!< Sensing related functions */
 uint32_t update_sensing_task(void);
-uint32_t execute_sensing_task(void);
-uint32_t read_sensing_result(void);
+uint32_t initiate_sensing_task(void);
+uint32_t read_result_update_payload(void);
+uint32_t switch_sensing_task(void);
 
 /*!< AfterScan as in Stacon */
 bool compare_snapshots(void);
@@ -343,16 +345,12 @@ uint32_t middleware_init(void) {
   localhost->node_id = DEVICE_ID;
   // TODO(liuchg): randomized init. for capabilities.
   localhost->cap_vec = 0;
-  /* SetBit(localhost->cap_vec, 0); */
-  /* SetBit(localhost->cap_vec, 1); */
-  /* SetBit(localhost->cap_vec, 2); */
-  /* SetBit(localhost->cap_vec, 3); */
+  SetBit(localhost->cap_vec, 1);
   SetBit(localhost->cap_vec, 5);
   localhost->demand_vec = 0xFFFF;
   localhost->next = NULL;
 
-  // Randomly assign a capapble task.
-  current_task_type = rng_rand(0, 2) + TASK_OFFSET;
+  current_task_type = TASK_IDLE;
   prev_task_type = 0xff;
 
   last_updated_lambda_ms = 0;
@@ -384,39 +382,43 @@ uint32_t update_sensing_task(void) {
 
 /**@brief Query the sensor, if current task is valid.
  */
-uint32_t execute_sensing_task(void) {
+uint32_t initiate_sensing_task(void) {
   if (current_task_type < TASK_OFFSET) {
     return 0;
   }
   context_start(current_task_type - TASK_OFFSET);
+  sample_initiated = true;
   return 0;
 }
 
-/**@brief Retrieve the sensor reading and update the shared context, if current task is valid.
+/**@brief Retrieve the sensor reading and update the beacon content, if current task is valid.
  * @details context_read might pause the sampling process if necessary.
  */
-uint32_t read_sensing_result(void) {
-  if (current_task_type < TASK_OFFSET) {
+uint32_t read_result_update_payload(void) {
+  if (current_task_type < TASK_OFFSET || !sample_initiated) {
     return 0;
   }
   saved_reading = context_read(current_task_type - TASK_OFFSET);
   context_pause(current_task_type - TASK_OFFSET);
+  if (update_payload(saved_reading, payload)) {
+    NRF_LOG_ERROR("Error when updating beacon payload.");
+  }
+  sample_initiated = false;
   return 0;
 }
 
-/**@brief Context type visualization using the lightwell.
+/**@brief Update LED visualization and stop the previous sensor.
 */
-uint32_t update_light(void) {
-  if (current_task_type == prev_task_type) {
-    return 0;
-  }
-  if (current_task_type - TASK_OFFSET > NUM_ENABLED_SENSOR) {
+uint32_t switch_sensing_task(void) {
+  if (current_task_type > NUM_ENABLED_SENSOR) {
     NRF_LOG_ERROR("Update light error (task context type out of range.)");
     return 1;
   }
   ret_code_t err_code = led_set(&led_colors[current_task_type],NULL);
   APP_ERROR_CHECK(err_code);
-  prev_task_type = current_task_type;
+  if (prev_task_type >= TASK_OFFSET && prev_task_type <= NUM_ENABLED_SENSOR) {
+    context_stop(prev_task_type - TASK_OFFSET);
+  }
   return 0;
 }
 
@@ -535,38 +537,31 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     break;
     }
   case BLEND_EVT_EPOCH_START: {
-    uint64_t cur_time_ms = _BLEND_APP_TIMER_MS(app_timer_cnt_get());
-    if (last_updated_lambda_ms + lambda_ms > cur_time_ms && last_updated_lambda_ms > 0) {
-      return;
-    }
-    //TODO(urgent): Move the read operation to the last beacon when the callback is implemented.
-    read_sensing_result();
     break;
   }
   case BLEND_EVT_AFTER_SCAN: {
+    // Update every lambda time.
     uint64_t cur_time_ms = _BLEND_APP_TIMER_MS(app_timer_cnt_get());
-    if (last_updated_lambda_ms + lambda_ms > cur_time_ms && last_updated_lambda_ms > 0) {
+    if (cur_time_ms > last_updated_lambda_ms && last_updated_lambda_ms + lambda_ms > cur_time_ms) {
       return;
     }
     update_neighbor_list(NULL);
 
-    // Update sensing task
     update_sensing_task();
-    // Execute sensing task
-    execute_sensing_task();
-    // Update lightwell
-    update_light();
 
-    // Update beacon payload
-    if (update_payload(saved_reading, payload)) {
-      NRF_LOG_ERROR("Error when updating beacon payload.");
+    initiate_sensing_task();
+
+    if (current_task_type != prev_task_type) {
+      switch_sensing_task();
+      prev_task_type = current_task_type;
     }
 
     last_updated_lambda_ms = cur_time_ms;
+    
     break;
   }
   case BLEND_EVT_LAST_FULL_BEACON: {
-
+    read_result_update_payload();
     break;
   }
   }
@@ -643,6 +638,7 @@ int main(void) {
   batt_init();
 
   middleware_init();
+  led_set(&led_colors[TASK_IDLE],NULL);
 
   run_test();
     
