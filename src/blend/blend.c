@@ -47,7 +47,7 @@ static m_ble_service_handle_t*  _blend_service_handles;
 #define _blend_reserved_idx (BEACON_SIZE_B - BLEND_BIDIR_RESERVED_LENGTH)
 #define _blend_payload_index (BLEND_IDENTIFIER_LENGTH + BLEND_STACK_RESERVED)
 bool _blend_adv_upload_flag = false;
-
+bool _blend_last_full_beacon_flag = false;
 #if defined(BLEND_SDK_THINGY) || defined(BLEND_SDK_14)
 static ble_gap_scan_params_t const m_scan_params =
 {
@@ -193,7 +193,7 @@ void blend_parse(ble_gap_evt_adv_report_t const * p_adv_report) {
 	if (countdown == 0xffff) {
 	  countdown =0;
 	}
-	countdown = countdown - _scan_duration_ms + APP_TIMER_MS(app_timer_cnt_diff_compute(now_time, _blend_epoch_start));
+	countdown = countdown - _scan_duration_ms + _BLEND_APP_TIMER_MS(app_timer_cnt_diff_compute(now_time, _blend_epoch_start));
 	_shadow_beacons[countdown / _adv_interval_ms +1] = 1;
       }
       blend_evt_t new_blend_evt;
@@ -261,7 +261,7 @@ void blend_parse(ble_gap_evt_adv_report_t const * p_adv_report) {
 	   if (countdown == 0xffff) {
 	     countdown =0;
 	   }
-	   countdown = countdown - _scan_duration_ms + APP_TIMER_MS(app_timer_cnt_diff_compute(now_time, _blend_epoch_start));
+	   countdown = countdown - _scan_duration_ms + _BLEND_APP_TIMER_MS(app_timer_cnt_diff_compute(now_time, _blend_epoch_start));
 	   _shadow_beacons[countdown / _adv_interval_ms +1] = 1;
 				
 	   blend_evt_t new_blend_evt;
@@ -433,9 +433,12 @@ void advertising_stop(void) {
 
 void beacon_count_set(int num) {
   uint16_t now_countdown;
-  now_countdown = _epoch_length_ms - APP_TIMER_MS(app_timer_cnt_diff_compute(app_timer_cnt_get(),_blend_epoch_start));
+  now_countdown = _epoch_length_ms - _BLEND_APP_TIMER_MS(app_timer_cnt_diff_compute(app_timer_cnt_get(),_blend_epoch_start)) + ONE_BEACON_MS;
   if (num == -1){
     now_countdown = ONE_BEACON_MS;
+  }
+  if ((now_countdown > _adv_interval_ms) && (now_countdown < (_adv_interval_ms * 2))){
+    _blend_last_full_beacon_flag = true;
   }
   if (_blend_mode == BLEND_MODE_BI){
     _blend_beacon_content[_blend_reserved_idx] = (now_countdown & 0xff00) >> 8;
@@ -493,22 +496,18 @@ void scan_timer_handler(void* p_context) {
 
 void half_epoch_timer_handler (void* p_context) {
   ret_code_t err_code;
-  if (_epoch_flag == 0) {
-    _epoch_flag = 1;
-    advertising_stop();
-    memset(_shadow_beacons, 0, (ROUNDED_DIV(_epoch_length_ms , _adv_interval_ms) + 2) * sizeof(_shadow_beacons[0]));
-    //Call blend handler
-    blend_evt_t new_blend_evt;
-    new_blend_evt.evt_id = BLEND_EVT_EPOCH_START;
-    new_blend_evt.evt_data.data = NULL;
-    new_blend_evt.evt_data.data_length = 0;
-    scan_prepare();
-    err_code=app_timer_stop(beacon_count_timer);
-    APP_ERROR_CHECK(err_code);
-    (*_blend_evt_handler) ( &new_blend_evt);
-  } else {
-    _epoch_flag = 0;
-  }
+  advertising_stop();
+  memset(_shadow_beacons, 0, (ROUNDED_DIV(_epoch_length_ms , _adv_interval_ms) + 2) * sizeof(_shadow_beacons[0]));
+  //Call blend handler
+  blend_evt_t new_blend_evt;
+  new_blend_evt.evt_id = BLEND_EVT_EPOCH_START;
+  new_blend_evt.evt_data.data = NULL;
+  new_blend_evt.evt_data.data_length = 0;
+  scan_prepare();
+  err_code=app_timer_stop(beacon_count_timer);
+  APP_ERROR_CHECK(err_code);
+  (*_blend_evt_handler) ( &new_blend_evt);
+
 }
 
 void beacon_count_timer_handler (void * p_context) {
@@ -523,6 +522,14 @@ void beacon_count_timer_handler (void * p_context) {
   if (_blend_sent_beacon_count > _mid_beacon && _shadow_beacons[_blend_sent_beacon_count] == 1 && _blend_mode == BLEND_MODE_BI) {
     advertising_start();
   }
+  if (_blend_last_full_beacon_flag){
+    _blend_last_full_beacon_flag = false;
+    blend_evt_t new_blend_evt;
+    new_blend_evt.evt_id = BLEND_EVT_LAST_FULL_BEACON;
+    new_blend_evt.evt_data.data = NULL;
+    new_blend_evt.evt_data.data_length = 0;
+    (*_blend_evt_handler) (&new_blend_evt);
+  }
 }
 
 void blend_sched_start() {
@@ -532,7 +539,7 @@ void blend_sched_start() {
   }
   ret_code_t err_code;
   _epoch_flag = 1;
-  err_code=app_timer_start(half_epoch_timer,APP_TIMER_TICKS(_epoch_length_ms /2), NULL);
+  err_code=app_timer_start(half_epoch_timer,APP_TIMER_TICKS(_epoch_length_ms), NULL);
   APP_ERROR_CHECK(err_code);
   scan_prepare();
 }
@@ -576,7 +583,7 @@ blend_ret_t blend_advdata_set(blend_data_t *input) {
   uint8_t * payload = input->data;
 	
   if (_blend_mode == BLEND_MODE_SINK) {
-    return BLEND_DATA_IN_SINK_MODE;
+    return BLEND_NO_ERROR;
   }
   if (dlen > BLEND_USER_PAYLOAD_SIZE) {
     return BLEND_DATA_OVERFLOW;

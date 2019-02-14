@@ -408,7 +408,7 @@ decoded_packet_t decode(uint8_t * bytes) {
     uint16_t val2 = 0;
     val1 = bytes[7] + (bytes[8] << 8) + (bytes[9] << 16) + (bytes[10] << 24);
     //TODO(liuchg): Process the extended field for rich types.
-    uint64_t cur_time_ms = APP_TIMER_MS(app_timer_cnt_get());
+    uint64_t cur_time_ms = _BLEND_APP_TIMER_MS(app_timer_cnt_get());
     context_t cur_context = {ngbr_id, ctx_type, val1, val2, cur_time_ms};
     decoded_packet_t decoded = {ngbr_id, ngbr_cap, ngbr_demand, ctx_valid, cur_context, cur_time_ms};
     return decoded;
@@ -449,7 +449,7 @@ uint32_t update_neighbor_list(decoded_packet_t* packet) {
     prev = NULL;
   }
 
-  uint64_t cur_time_ms = APP_TIMER_MS(app_timer_cnt_get());
+  uint64_t cur_time_ms = _BLEND_APP_TIMER_MS(app_timer_cnt_get());
   while(cur) {
     if (cur->last_sync_ms + LOSING_PERIOD*lambda_ms < cur_time_ms) {
       if (prev) {
@@ -488,6 +488,7 @@ uint32_t udpate_context_pool(decoded_packet_t* packet) {
 
 static void m_blend_handler(blend_evt_t * p_blend_evt)
 {
+  // NRF_LOG_INFO("!!!!!!!!!!!%d", p_blend_evt->evt_id);
   switch (p_blend_evt->evt_id) {
   case BLEND_EVT_ADV_REPORT: {
     uint8_t * p_data = p_blend_evt->evt_data.data;
@@ -514,7 +515,7 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     break;
   }
   case BLEND_EVT_AFTER_SCAN: {
-    uint64_t cur_time_ms = APP_TIMER_MS(app_timer_cnt_get());
+    uint64_t cur_time_ms = _BLEND_APP_TIMER_MS(app_timer_cnt_get());
     if (last_updated_lambda_ms > cur_time_ms - lambda_ms) {
       return;
     }
@@ -541,8 +542,9 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     last_updated_lambda_ms = cur_time_ms;
     break;
   }
-  default: {
-    NRF_LOG_ERROR("Event handler (invalid event type).");
+  case BLEND_EVT_LAST_FULL_BEACON: {
+
+    break;
   }
   }
 }

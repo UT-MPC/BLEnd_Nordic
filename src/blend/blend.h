@@ -9,6 +9,7 @@
 #define BLEND_EVT_ADV_REPORT  0x01
 #define BLEND_EVT_EPOCH_START  0x02
 #define BLEND_EVT_AFTER_SCAN  0x03
+#define BLEND_EVT_LAST_FULL_BEACON 0x04
 // Beacon size in bytes.
 #define BEACON_SIZE_B  31
 // Reserved length only used in bidirectional mode
@@ -26,7 +27,7 @@
 	#define _BLEND_ADV_TYPE					BLE_GAP_ADV_TYPE_ADV_SCAN_IND
 #endif
 
-#define	APP_TIMER_MS(TICKS) TICKS*(1000 * (APP_TIMER_CONFIG_RTC_FREQUENCY + 1))/(uint64_t) APP_TIMER_CLOCK_FREQ
+#define	_BLEND_APP_TIMER_MS(TICKS) TICKS*(1000 * (APP_TIMER_CONFIG_RTC_FREQUENCY + 1))/(uint64_t) APP_TIMER_CLOCK_FREQ
 
 #define ONE_BEACON_MS					5
 
