@@ -56,17 +56,27 @@ uint8_t get_new_assignment(node_t const *snapshot, uint8_t local_idx) {
  * @return Matrix representation of the snapshot.
  */
 int* convert_to_matrix(node_t const *snapshot, size_t n_ngbr, size_t n_types) {
-  int* ret = malloc(sizeof(int)*n_types*n_ngbr);
+  int m = n_ngbr;
+  int n = n_types;
+  if (n >= m) {
+    m = n;
+  }
+  int* ret = malloc(sizeof(int)*m*n);
   const node_t* it = snapshot;
   for (int i = 0; i < n_ngbr; ++i) {
-    for (int j = 0; j < n_types; ++j) {
+    for (int j = 0; j < n; ++j) {
       if (TestBit(it->cap_vec, j)) {
-	ret[i*n_types + j] = 1; // OPTIONAL(liuchg): Relate to context demand model.
+	ret[i*n + j] = j+1; // OPTIONAL(liuchg): Relate to context demand model.
       } else {
-	ret[i*n_types + j] = MAXUTIL;
+	ret[i*n + j] = MAXUTIL;
       }
     }
     it = it->next;
+  }
+  for (int i = n_ngbr; i < m; ++i) {
+    for (int j = 0; j < n; ++j) {
+      ret[i*n + j] = MAXUTIL;
+    }
   }
   return ret;
 }
