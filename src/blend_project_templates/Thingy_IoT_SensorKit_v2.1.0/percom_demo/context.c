@@ -21,6 +21,7 @@ void ctx2color(context_t* , void** );
 void ctx2gas(context_t* , void** );
 void ctx2sound(context_t*, void** );
 
+#define max_ctx 5
 char* ctx_name[]={"Temperature", "Humidity", "Pressure", "Color", "VOC", "SoundLevel"};
 sensor2ctx_func_t sensor2ctx_func[]={temp2ctx, humid2ctx, pressure2ctx, color2ctx, gas2ctx, sound2ctx};
 ctx2sensor_func_t ctx2sensor_func[]={ctx2temp, ctx2humid, ctx2pressure, ctx2color, ctx2gas, ctx2sound};
@@ -132,6 +133,10 @@ void ctx2pressure(context_t* context_in, void** sensor_p){
 }
 
 context_t context_read(uint8_t ctx_type){
+  if (ctx_type > max_ctx){
+    NRF_LOG_ERROR("Context %d type exceeds", ctx_type);
+    return;
+  }
   void ** cur_sensor_ptr = malloc(sizeof(void*));
   sensor_read_func[ctx_type](cur_sensor_ptr);
   context_t new_context={-1,ctx_type,0,0,0};
@@ -141,11 +146,19 @@ context_t context_read(uint8_t ctx_type){
 }
 
 void context_start(uint8_t ctx_type){
+  if (ctx_type > max_ctx){
+    NRF_LOG_ERROR("Context %d type exceeds", ctx_type);
+    return;
+  }
   sensor_start_func[ctx_type]();
   return;
 }
 
 void context_pause(uint8_t ctx_type){
+  if (ctx_type > max_ctx){
+    NRF_LOG_ERROR("Context %d type exceeds", ctx_type);
+    return;
+  }
   if ((ctx_type == LOCATION_CTX) || (ctx_type == VOC_CTX)){
     return;
   }
@@ -153,12 +166,20 @@ void context_pause(uint8_t ctx_type){
 }
 
 uint32_t context_stop(uint8_t ctx_type){
+  if (ctx_type > max_ctx){
+    NRF_LOG_ERROR("Context %d type exceeds", ctx_type);
+    return;
+  }
   return sensor_stop_func[ctx_type]();
 }
 
 
 void context2str(context_t context_in, char* str_out){
   uint8_t ctype = context_in.ctx_type;
+  if (ctype > max_ctx){
+    NRF_LOG_ERROR("Context %d type exceeds", ctype);
+    return;
+  }
   void ** cur_sensor_ptr = malloc(sizeof(void*));
   ctx2sensor_func[ctype](&context_in, cur_sensor_ptr);
   sensor2str_func[ctype](*cur_sensor_ptr, str_out);
