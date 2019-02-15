@@ -67,7 +67,7 @@ void m_gas2str(void* gas_p, char* str) {
 void m_sound2str(void* sound_p, char* str) {
   sound_t sound_in = *((sound_t*)sound_p);
   //sprintf(str, "Average noise level: " NRF_LOG_FLOAT_MARKER " \r\n", NRF_LOG_FLOAT(sound_in.sound_level));
-  sprintf(str, "Average sound level: %.3f \r\n", sound_in.sound_level);
+  sprintf(str, "Average sound level \r\n");
 }
 
 /**@brief Function for converting the temperature sample.

@@ -346,14 +346,14 @@ uint32_t middleware_init(void) {
   // TODO(liuchg): randomized init. for capabilities.
   localhost->cap_vec = 0;
   SetBit(localhost->cap_vec, 1);
-  SetBit(localhost->cap_vec, 5);
+  SetBit(localhost->cap_vec, 2);
   localhost->demand_vec = 0xFFFF;
   localhost->next = NULL;
 
   current_task_type = TASK_IDLE;
   prev_task_type = 0xff;
 
-  last_updated_lambda_ms = 0;
+  last_updated_lambda_ms = 999; // Anything greater than first scan after
   
   return 0;
 }
@@ -369,7 +369,7 @@ uint32_t update_sensing_task(void) {
   uint8_t l_id = take_snapshot();
   current_task_type = get_new_assignment(snapshot, l_id);
   if (current_task_type >= TASK_OFFSET && (current_task_type - TASK_OFFSET) <= NUM_ENABLED_SENSOR && TestBit(localhost->cap_vec, current_task_type - TASK_OFFSET)) {
-    NRF_LOG_DEBUG("Context task selected: %d.\r\n", current_task_type - TASK_OFFSET);
+    NRF_LOG_DEBUG("Context task selected (%d ms): %d.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()) ,current_task_type - TASK_OFFSET);
   } else {
     NRF_LOG_DEBUG("Context task selected: Idle (%d, l_id:%d).\r\n", current_task_type, l_id);
     current_task_type = TASK_IDLE;
@@ -435,7 +435,7 @@ decoded_packet_t decode(uint8_t * bytes) {
     val1 = bytes[7] + (bytes[8] << 8) + (bytes[9] << 16) + (bytes[10] << 24);
     //TODO(liuchg): Process the extended field for rich types.
     uint64_t cur_time_ms = _BLEND_APP_TIMER_MS(app_timer_cnt_get());
-    context_t cur_context = {ngbr_id, ctx_type, val1, val2, cur_time_ms};
+    context_t cur_context = {ngbr_id, ctx_type-TASK_OFFSET, val1, val2, cur_time_ms};
     decoded_packet_t decoded = {ngbr_id, ngbr_cap, ngbr_demand, ctx_valid, cur_context, cur_time_ms};
     return decoded;
 }
@@ -514,6 +514,7 @@ uint32_t udpate_context_pool(decoded_packet_t* packet) {
 
 static void m_blend_handler(blend_evt_t * p_blend_evt)
 {
+  //  NRF_LOG_DEBUG("m_blend_handler:%d, (%d ms).\r\n",p_blend_evt->evt_id, _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
   switch (p_blend_evt->evt_id) {
   case BLEND_EVT_ADV_REPORT: {
     uint8_t * p_data = p_blend_evt->evt_data.data;
@@ -532,7 +533,7 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     // For debug purpose
     char* x = malloc(sizeof(char) * 30);
     context2str(decoded_packet.context, x);
-    NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN "Read context: %s from node %d (cap:%d).\r\n", (uint32_t)x, decoded_packet.context.source_id, decoded_packet.cap_vec);
+    NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN "Read context(%d): %s from node %d (cap:%d).\r\n", decoded_packet.context.ctx_type, (uint32_t)x, decoded_packet.context.source_id, decoded_packet.cap_vec);
     free(x);
     break;
     }
@@ -627,8 +628,7 @@ int main(void) {
 		
   err_code = nrf_drv_rng_init(NULL);
   APP_ERROR_CHECK(err_code);
-		
-  
+
   APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
 
   board_init();
@@ -638,7 +638,6 @@ int main(void) {
   batt_init();
 
   middleware_init();
-  led_set(&led_colors[TASK_IDLE],NULL);
 
   run_test();
     
