@@ -14,6 +14,15 @@
 #define TASK_OFFSET 1
 #define TASK_IDLE 0
 
+#define VALID_DURATION_DEFAULT_S 30
+#define VALID_DURATION_TEMP_S VALID_DURATION_DEFAULT_S
+#define VALID_DURATION_HUMID_S VALID_DURATION_DEFAULT_S
+#define VALID_DURATION_PRESS_S VALID_DURATION_DEFAULT_S
+#define VALID_DURATION_COLOR_S 10
+#define VALID_DURATION_VOC_S VALID_DURATION_DEFAULT_S
+#define VALID_DURATION_NOISE_S 5
+#define VALID_DURATION_LOCATION_S 5
+
 #define SetBit(A,k) (A |= (1 << (k%NUM_CONTEXT_TYPES)))
 #define ClearBit(A,k) (A &= ~(1 << (k%NUM_CONTEXT_TYPES)))
 #define TestBit(A,k) (A & (1 << (k%NUM_CONTEXT_TYPES)))
@@ -64,7 +73,9 @@ void context_pause(uint8_t ctx_tye);
   have enough space for the string
 */
 void context2str(context_t context_in, char* str_out);
+
 extern char* ctx_name[];
+extern const uint64_t context_valid_duraion_s[];
 
 
 #endif

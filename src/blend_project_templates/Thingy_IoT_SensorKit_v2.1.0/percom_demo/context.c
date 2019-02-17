@@ -1,7 +1,7 @@
 #include "context.h"
 
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "app_timer.h"
 #include "nrf_log.h"
@@ -22,14 +22,14 @@ void ctx2color(context_t* , void** );
 void ctx2gas(context_t* , void** );
 void ctx2sound(context_t*, void** );
 
-#define NUM_THINGY_SUPPORTED_SENSORS 5
-char* ctx_name[]={"Temperature", "Humidity", "Pressure", "Color", "VOC", "SoundLevel"};
-sensor2ctx_func_t sensor2ctx_func[]={temp2ctx, humid2ctx, pressure2ctx, color2ctx, gas2ctx, sound2ctx};
-ctx2sensor_func_t ctx2sensor_func[]={ctx2temp, ctx2humid, ctx2pressure, ctx2color, ctx2gas, ctx2sound};
-sensor_sample_func_t sensor_start_func[]={m_humidity_sample, m_humidity_sample, m_pressure_sample, m_color_sample, m_gas_sample, m_sound_sample};
-sensor_read_func_t sensor_read_func[]={m_temperature_read, m_humidity_read, m_pressure_read, m_color_read, m_gas_read, m_sound_read};
-sensor_disable_func_t sensor_stop_func[]={m_humidity_disable, m_humidity_disable, m_pressure_disable, m_color_disable, m_gas_disable, m_sound_disable};
-sensor2str_func_t sensor2str_func[]={m_temperature2str, m_humidity2str, m_pressure2str, m_color2str, m_gas2str, m_sound2str};
+char* ctx_name[] = {"Temperature", "Humidity", "Pressure", "Color", "VOC", "SoundLevel"};
+const uint64_t context_valid_duraion_s[] = {VALID_DURATION_TEMP_S, VALID_DURATION_HUMID_S, VALID_DURATION_PRESS_S, VALID_DURATION_COLOR_S, VALID_DURATION_VOC_S, VALID_DURATION_NOISE_S, VALID_DURATION_LOCATION_S};
+sensor2ctx_func_t sensor2ctx_func[] = {temp2ctx, humid2ctx, pressure2ctx, color2ctx, gas2ctx, sound2ctx};
+ctx2sensor_func_t ctx2sensor_func[] = {ctx2temp, ctx2humid, ctx2pressure, ctx2color, ctx2gas, ctx2sound};
+sensor_sample_func_t sensor_start_func[] = {m_humidity_sample, m_humidity_sample, m_pressure_sample, m_color_sample, m_gas_sample, m_sound_sample};
+sensor_read_func_t sensor_read_func[] = {m_temperature_read, m_humidity_read, m_pressure_read, m_color_read, m_gas_read, m_sound_read};
+sensor_disable_func_t sensor_stop_func[] = {m_humidity_disable, m_humidity_disable, m_pressure_disable, m_color_disable, m_gas_disable, m_sound_disable};
+sensor2str_func_t sensor2str_func[] = {m_temperature2str, m_humidity2str, m_pressure2str, m_color2str, m_gas2str, m_sound2str};
 
 void gas2ctx(void* gas_in, context_t* context_out) {
   gas_t gas = *((gas_t*)gas_in);
@@ -134,10 +134,6 @@ void ctx2pressure(context_t* context_in, void** sensor_p){
 }
 
 context_t context_read(uint8_t ctx_type){
-  if (ctx_type > NUM_THINGY_SUPPORTED_SENSORS){
-    NRF_LOG_ERROR("Context %d type exceeds", ctx_type);
-    return;
-  }
   void ** cur_sensor_ptr = malloc(sizeof(void*));
   sensor_read_func[ctx_type](cur_sensor_ptr);
   context_t new_context={-1,ctx_type,0,0,0};
@@ -147,19 +143,13 @@ context_t context_read(uint8_t ctx_type){
 }
 
 void context_start(uint8_t ctx_type){
-  if (ctx_type > NUM_THINGY_SUPPORTED_SENSORS){
-    NRF_LOG_ERROR("Context %d type exceeds", ctx_type);
-    return;
-  }
+  //NRF_LOG_DEBUG("context_start: %d\r\n", ctx_type);
   sensor_start_func[ctx_type]();
   return;
 }
 
 void context_pause(uint8_t ctx_type){
-  if (ctx_type > NUM_THINGY_SUPPORTED_SENSORS){
-    NRF_LOG_ERROR("Context %d type exceeds", ctx_type);
-    return;
-  }
+  //NRF_LOG_DEBUG("context_pause: %d\r\n", ctx_type);
   if ((ctx_type == LOCATION_CTX) || (ctx_type == VOC_CTX)){
     return;
   }
@@ -167,20 +157,13 @@ void context_pause(uint8_t ctx_type){
 }
 
 uint32_t context_stop(uint8_t ctx_type){
-  if (ctx_type > NUM_THINGY_SUPPORTED_SENSORS){
-    NRF_LOG_ERROR("Context %d type exceeds", ctx_type);
-    return;
-  }
+  //NRF_LOG_DEBUG("context_stop: %d\r\n", ctx_type);
   return sensor_stop_func[ctx_type]();
 }
 
 
 void context2str(context_t context_in, char* str_out){
   uint8_t ctype = context_in.ctx_type;
-  if (ctype > NUM_THINGY_SUPPORTED_SENSORS){
-    NRF_LOG_ERROR("Context %d type exceeds", ctype);
-    return;
-  }
   void ** cur_sensor_ptr = malloc(sizeof(void*));
   ctx2sensor_func[ctype](&context_in, cur_sensor_ptr);
   sensor2str_func[ctype](*cur_sensor_ptr, str_out);

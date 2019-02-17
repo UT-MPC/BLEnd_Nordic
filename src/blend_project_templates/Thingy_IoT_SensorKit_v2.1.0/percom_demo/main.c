@@ -96,6 +96,7 @@
 #define NUM_ENABLED_SENSOR 7
 #define LOSING_PERIOD 2.5
 #define BATT_READ_INTERVAL_MS 600000    //10min
+#define ENERGY_SAVING_SENSING 1 // 1-true, 0-false
 
 //! BLEnd parameters {Epoch, Adv. interval, mode}.
 const uint16_t lambda_ms = 4000;
@@ -115,6 +116,7 @@ uint8_t on_scan_flag  = 0;
 uint8_t discovered = 0;
 bool discover_mode = true;
 bool sample_initiated = false;
+uint64_t last_sample_time_ms;
 
 static const nrf_drv_twi_t m_twi_sensors = NRF_DRV_TWI_INSTANCE(TWI_SENSOR_INSTANCE);
 
@@ -345,8 +347,10 @@ uint32_t middleware_init(void) {
   localhost->node_id = DEVICE_ID;
   // TODO(liuchg): randomized init. for capabilities.
   localhost->cap_vec = 0;
+  SetBit(localhost->cap_vec, 0);
   SetBit(localhost->cap_vec, 1);
-  SetBit(localhost->cap_vec, 2);
+  SetBit(localhost->cap_vec, 3);
+  SetBit(localhost->cap_vec, 5);
   localhost->demand_vec = 0xFFFF;
   localhost->next = NULL;
 
@@ -354,6 +358,7 @@ uint32_t middleware_init(void) {
   prev_task_type = 0xff;
 
   last_updated_lambda_ms = 999; // Anything greater than first scan after
+  last_sample_time_ms = 999;
   
   return 0;
 }
@@ -386,6 +391,13 @@ uint32_t initiate_sensing_task(void) {
   if (current_task_type < TASK_OFFSET) {
     return 0;
   }
+  if (ENERGY_SAVING_SENSING && current_task_type == prev_task_type) {
+    uint64_t cur_time_ms = _BLEND_APP_TIMER_MS(app_timer_cnt_get());
+    if (last_sample_time_ms < cur_time_ms && (last_sample_time_ms + context_valid_duraion_s[current_task_type - TASK_OFFSET]*1000) > cur_time_ms) {
+      // Last sample is still valid. Skip sampling in energy saving mode.
+      return 0;
+    }
+  }
   context_start(current_task_type - TASK_OFFSET);
   sample_initiated = true;
   return 0;
@@ -415,7 +427,7 @@ uint32_t switch_sensing_task(void) {
     return 1;
   }
   ret_code_t err_code = led_set(&led_colors[current_task_type],NULL);
-  APP_ERROR_CHECK(err_code);
+  //  APP_ERROR_CHECK(err_code);
   if (prev_task_type >= TASK_OFFSET && prev_task_type <= NUM_ENABLED_SENSOR) {
     context_stop(prev_task_type - TASK_OFFSET);
   }
