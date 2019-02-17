@@ -96,11 +96,12 @@
 #define NUM_ENABLED_SENSOR 7
 #define LOSING_PERIOD 2.5
 #define BATT_READ_INTERVAL_MS 600000    //10min
-#define ENERGY_SAVING_SENSING 1 // 1-true, 0-false
+#define ENERGY_SAVING_SENSING 0 // 1-true, 0-false
+#define BATTERY_PROFILING 1 //1-true, 0-false
 
 //! BLEnd parameters {Epoch, Adv. interval, mode}.
 const uint16_t lambda_ms = 4000;
-const uint16_t epoch_length_ms = 1327;
+const uint16_t epoch_length_ms = 1328;
 const uint16_t adv_interval_ms = 127;
 
 //! {protocol_id, node_id, cap_vec, demand_vec, shared_type, value1, value2}.
@@ -347,10 +348,12 @@ uint32_t middleware_init(void) {
   localhost->node_id = DEVICE_ID;
   // TODO(liuchg): randomized init. for capabilities.
   localhost->cap_vec = 0;
-  SetBit(localhost->cap_vec, 0);
-  SetBit(localhost->cap_vec, 1);
-  SetBit(localhost->cap_vec, 3);
-  SetBit(localhost->cap_vec, 5);
+  //SetBit(localhost->cap_vec, 0);
+  //SetBit(localhost->cap_vec, 1);
+  //SetBit(localhost->cap_vec, 2);
+  //SetBit(localhost->cap_vec, 3);
+  //SetBit(localhost->cap_vec, 4);
+  //SetBit(localhost->cap_vec, 5);
   localhost->demand_vec = 0xFFFF;
   localhost->next = NULL;
 
@@ -370,6 +373,9 @@ uint32_t middleware_init(void) {
 uint32_t update_sensing_task(void) {
   if (snapshot && compare_snapshots()) {
     return 0;
+  }
+  if (node_lst_head->cap_vec == 0) {
+    return TASK_IDLE;
   }
   uint8_t l_id = take_snapshot();
   current_task_type = get_new_assignment(snapshot, l_id);
@@ -407,11 +413,13 @@ uint32_t initiate_sensing_task(void) {
  * @details context_read might pause the sampling process if necessary.
  */
 uint32_t read_result_update_payload(void) {
-  if (current_task_type < TASK_OFFSET || !sample_initiated) {
-    return 0;
+  if (current_task_type >= TASK_OFFSET) {
+    if (!sample_initiated) {
+      return 0;
+    }
+    saved_reading = context_read(current_task_type - TASK_OFFSET);
+    context_pause(current_task_type - TASK_OFFSET);
   }
-  saved_reading = context_read(current_task_type - TASK_OFFSET);
-  context_pause(current_task_type - TASK_OFFSET);
   if (update_payload(saved_reading, payload)) {
     NRF_LOG_ERROR("Error when updating beacon payload.");
   }
@@ -426,8 +434,10 @@ uint32_t switch_sensing_task(void) {
     NRF_LOG_ERROR("Update light error (task context type out of range.)");
     return 1;
   }
-  ret_code_t err_code = led_set(&led_colors[current_task_type],NULL);
-  //  APP_ERROR_CHECK(err_code);
+  if (!BATTERY_PROFILING) {
+    ret_code_t err_code = led_set(&led_colors[current_task_type],NULL);
+    APP_ERROR_CHECK(err_code);
+  }
   if (prev_task_type >= TASK_OFFSET && prev_task_type <= NUM_ENABLED_SENSOR) {
     context_stop(prev_task_type - TASK_OFFSET);
   }
@@ -459,6 +469,9 @@ decoded_packet_t decode(uint8_t * bytes) {
  * @param[in] packet Received packet from radio frame.
 */
 uint32_t update_neighbor_list(decoded_packet_t* packet) {
+  if (BATTERY_PROFILING) {
+    return 0;
+  }
   node_t* cur = node_lst_head;
   node_t* prev = NULL;
   
