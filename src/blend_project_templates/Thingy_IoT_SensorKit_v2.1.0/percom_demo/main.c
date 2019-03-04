@@ -351,7 +351,7 @@ uint32_t middleware_init(void) {
   SetBit(localhost->cap_vec, 0);
   SetBit(localhost->cap_vec, 1);
   SetBit(localhost->cap_vec, 2);
-  SetBit(localhost->cap_vec, 3);
+  // SetBit(localhost->cap_vec, 3);
   // SetBit(localhost->cap_vec, 4);
   // SetBit(localhost->cap_vec, 5);
   localhost->demand_vec = 0xFFFF;
@@ -554,12 +554,14 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
     update_neighbor_list(&decoded_packet);
     if (decoded_packet.is_ctx_valid){
       udpate_context_pool(&decoded_packet);
+      char* x = malloc(sizeof(char) * 30);
+      context2str(decoded_packet.context, x);
+      NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN "Received context(%d): %s from node %d (cap:%d).\r\n", decoded_packet.context.ctx_type, (uint32_t)x, decoded_packet.context.source_id, decoded_packet.cap_vec);
+      free(x);
+    } else {
+      NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN "Received idle beacon from from node %d (cap:%d).\r\n", decoded_packet.context.source_id, decoded_packet.cap_vec);
     }
-    // For debug purpose
-    char* x = malloc(sizeof(char) * 30);
-    context2str(decoded_packet.context, x);
-    NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN "Read context(%d): %s from node %d (cap:%d).\r\n", decoded_packet.context.ctx_type, (uint32_t)x, decoded_packet.context.source_id, decoded_packet.cap_vec);
-    free(x);
+    
     break;
     }
   case BLEND_EVT_EPOCH_START: {
