@@ -2,16 +2,20 @@ PROJECT_NAME     := ble_app_uart_c_pca10056_s140
 TARGETS          := nrf52840_xxaa
 OUTPUT_DIRECTORY := _build
 
-SDK_ROOT := ../../../../../..
-PROJ_DIR := ../../..
+PROJ_ROOT := ../../../../../../..
+# SDK_ROOT := $(wildcard $(PROJ_ROOT)/sdk/nRF5_SDK_14*/)
+SDK_ROOT := $(PROJ_ROOT)/sdk/nRF5_SDK_14.2.0_17b948a
+LOCAL_SRC_DIR := ../../..
+LOCAL_SRCS := $(wildcard $(LOCAL_SRC_DIR)/*.c)
 
 $(OUTPUT_DIRECTORY)/nrf52840_xxaa.out: \
   LINKER_SCRIPT  := ble_app_uart_c_gcc_nrf52.ld
 
 # Source files common to all targets
 SRC_FILES += \
-  $(SDK_ROOT)/blend/blend.c \
-  $(SDK_ROOT)/Adafruit_GPS/adafruit_gps.c \
+  $(LOCAL_SRCS) \
+  $(PROJ_ROOT)/src/blend/blend.c \
+  $(PROJ_ROOT)/src/Adafruit_GPS/adafruit_gps.c \
   $(SDK_ROOT)/components/libraries/experimental_log/src/nrf_log_backend_rtt.c \
   $(SDK_ROOT)/components/libraries/experimental_log/src/nrf_log_backend_serial.c \
   $(SDK_ROOT)/components/libraries/experimental_log/src/nrf_log_default_backends.c \
@@ -44,7 +48,6 @@ SRC_FILES += \
   $(SDK_ROOT)/components/libraries/bsp/bsp.c \
   $(SDK_ROOT)/components/libraries/bsp/bsp_btn_ble.c \
   $(SDK_ROOT)/components/libraries/bsp/bsp_nfc.c \
-  $(PROJ_DIR)/main.c \
   $(SDK_ROOT)/external/segger_rtt/SEGGER_RTT_Syscalls_GCC.c \
   $(SDK_ROOT)/external/segger_rtt/SEGGER_RTT.c \
   $(SDK_ROOT)/external/segger_rtt/SEGGER_RTT_printf.c \
@@ -62,8 +65,9 @@ SRC_FILES += \
 # Include folders common to all targets
 # $(SDK_ROOT)/components/libraries/experimental_cli 
 INC_FOLDERS += \
-  $(SDK_ROOT)/blend \
-  $(SDK_ROOT)/Adafruit_GPS \
+  $(PROJ_ROOT)/src/blend \
+  $(PROJ_ROOT)/src/Adafruit_GPS \
+  ../config \
   $(SDK_ROOT)/components/drivers_nrf/comp \
   $(SDK_ROOT)/components/drivers_nrf/twi_master \
   $(SDK_ROOT)/components/ble/ble_services/ble_ancs_c \
@@ -127,7 +131,6 @@ INC_FOLDERS += \
   $(SDK_ROOT)/components/drivers_nrf/timer \
   $(SDK_ROOT)/components/libraries/util \
   $(SDK_ROOT)/components/drivers_nrf/pwm \
-  ../config \
   $(SDK_ROOT)/components/libraries/csense_drv \
   $(SDK_ROOT)/components/libraries/csense \
   $(SDK_ROOT)/components/libraries/balloc \
@@ -196,7 +199,6 @@ CFLAGS += -DSOFTDEVICE_PRESENT
 CFLAGS += -DSWI_DISABLE0
 CFLAGS += -mcpu=cortex-m4
 CFLAGS += -mthumb -mabi=aapcs
-#CFLAGS +=  -Wall -Werror
 CFLAGS += -Wall -O3 -g3
 CFLAGS += -mfloat-abi=hard -mfpu=fpv4-sp-d16
 # keep every function in a separate section, this allows linker to discard unused ones

@@ -157,8 +157,8 @@ $(abspath $(SDK_DIR)sdk_components/libraries/strerror/nrf_strerror.c) \
 ASM_SOURCE_FILES  = $(abspath $(SDK_DIR)sdk_components/toolchain/gcc/gcc_startup_nrf52.S)
 
 #includes common to all targets
-INC_PATHS += -I$(abspath ../)
-INC_PATHS += -I$(abspath ../config)
+INC_PATHS += -I$(abspath $(LOCAL_SRC_DIR))
+INC_PATHS += -I$(abspath $(LOCAL_SRC_DIR)config)
 INC_PATHS += -I$(abspath $(PROJ_ROOT)src/blend)
 INC_PATHS += -I$(abspath $(SDK_DIR)external/segger_rtt)
 INC_PATHS += -I$(abspath $(SDK_DIR)include/ble_services)

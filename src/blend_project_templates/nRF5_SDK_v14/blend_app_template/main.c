@@ -364,7 +364,7 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
 		if ((dis_flag == 0) && (epoch_count >= delay_epoches)){
 			found_device[now_device -1 ] = 1;
 			uint32_t time = app_timer_cnt_diff_compute(now_time,start_tick)- reduce_ticks;
-			time = APP_TIMER_MS(time) & 0xffff;
+			time = _BLEND_APP_TIMER_MS(time) & 0xffff;
 			payload [discover_index-2+now_device*2] = time >> 8;
 			payload [discover_index-1+now_device*2] = time & 0xff;
 			set_blend_data();
