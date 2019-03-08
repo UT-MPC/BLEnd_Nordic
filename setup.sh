@@ -169,6 +169,7 @@ add_gps_mod()
 	fi
     fi
 }
+
 add_template_project()
 {
     echo -e "\nCreating template project..."
@@ -210,8 +211,9 @@ thingy_sdk_change()
 
 finish()
 {
+    template_path="${ROOT_DIR}/${BLEND_TEMP_ORI_LOCATION}"
     echo -e "\n \033[1mAll done. You're now ready to compile the SDK and begin your" \
-	 "development (with the template project)\033[0m."
+	 "development (with the template project in ${template_path})\033[0m."
 
     if [ ! "$NRF_TOOL_INSTALLED" == true ]; then
 	echo -e "\n -[nRF5x Command Line Tools] is not installed. Follow ${TOOLCHAIN_URL}" \
@@ -239,6 +241,6 @@ add_blend_src
 
 add_gps_mod
 
-add_template_project
+#add_template_project
 
 finish
