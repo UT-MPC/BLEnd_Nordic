@@ -6,7 +6,7 @@ MAKEFILE_NAME := $(MAKEFILE_LIST)
 MAKEFILE_DIR := $(dir $(MAKEFILE_NAME) )
 
 PROJ_ROOT := ../../../../../
-SDK_DIR := $(wildcard $(PROJ_ROOT)/sdk/*Thingy52*/)
+SDK_DIR := $(wildcard $(PROJ_ROOT)sdk/*Thingy52*/)
 LOCAL_SRC_DIR := ../
 LOCAL_SRCS := $(wildcard $(LOCAL_SRC_DIR)/*.c) 
 
