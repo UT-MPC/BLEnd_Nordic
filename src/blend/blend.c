@@ -246,35 +246,33 @@ void advertising_init(void) {
 }
 
 void blend_parse(ble_gap_evt_adv_report_t const * p_adv_report) {
-    uint16_t index  = 0;
-    uint16_t countdown; //TODO: uninitialized?
-    uint8_t* p_data = (uint8_t *)p_adv_report->data.p_data;
-    
-    while (index < p_adv_report->data.len) {
-       uint8_t field_length = p_data[index];
-       uint8_t field_type = p_data[index + 1];
-
-       if (field_type == BLE_GAP_AD_TYPE_MANUFACTURER_SPECIFIC_DATA) {
-	 if ((p_data[index+2]== (BLEND_IDENTIFIER & 0x00ff) )&&(p_data[index+3]==(BLEND_IDENTIFIER >> 8))) {
-	   uint32_t now_time = app_timer_cnt_get();
-	   countdown = (p_data[index + 4 + _blend_reserved_idx] << 8) + p_data[index + 4 + _blend_reserved_idx+1];
-	   if (countdown == 0xffff) {
-	     countdown =0;
-	   }
-	   countdown = countdown - _scan_duration_ms + _BLEND_APP_TIMER_MS(app_timer_cnt_diff_compute(now_time, _blend_epoch_start));
-	   _shadow_beacons[countdown / _adv_interval_ms +1] = 1;
-				
-	   blend_evt_t new_blend_evt;
-	   new_blend_evt.evt_id = BLEND_EVT_ADV_REPORT;
-	   new_blend_evt.evt_data.data = p_data + index + 4 + _blend_payload_index;
-	   new_blend_evt.evt_data.data_length = field_length - BLEND_Reserved_size - 3;
-	   (*_blend_evt_handler) ( &new_blend_evt);
-	 }
-       }
-       index += field_length + 1;
+  uint16_t index  = 0;
+  uint16_t countdown; //TODO: uninitialized?
+  uint8_t* p_data = (uint8_t *)p_adv_report->data.p_data;
+  while (index < p_adv_report->data.len) {
+    uint8_t field_length = p_data[index];
+    uint8_t field_type = p_data[index + 1];
+    if (field_type == BLEND_IDENTIFIER) {
+      uint32_t now_time = app_timer_cnt_get();
+      if (_blend_mode == BLEND_MODE_BI){
+        countdown = (p_data[_blend_reserved_idx] << 8) + p_data[_blend_reserved_idx+1];
+        if (countdown == 0xffff) {
+          countdown =0;
+        }
+        countdown = countdown - _scan_duration_ms + _BLEND_APP_TIMER_MS(app_timer_cnt_diff_compute(now_time, _blend_epoch_start));
+        _shadow_beacons[countdown / _adv_interval_ms +1] = 1;
+      }
+      blend_evt_t new_blend_evt;
+      new_blend_evt.evt_id = BLEND_EVT_ADV_REPORT;
+      new_blend_evt.evt_data.data = p_data + _blend_payload_index;
+      new_blend_evt.evt_data.data_length = field_length - 1;
+      new_blend_evt.peer_addr = p_adv_report->peer_addr;
+      (*_blend_evt_handler) (&new_blend_evt);
     }
-    ret_code_t ret = sd_ble_gap_scan_start(NULL, &_blend_scan_instance.scan_buffer);
-    APP_ERROR_CHECK(ret);
+    index += field_length + 1;
+  }
+  ret_code_t ret = sd_ble_gap_scan_start(NULL, &_blend_scan_instance.scan_buffer);
+  APP_ERROR_CHECK(ret);
 }
 #endif
 

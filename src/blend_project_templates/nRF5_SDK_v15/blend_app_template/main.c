@@ -336,7 +336,7 @@ static void application_timer_set(void)
 static void run_test(){
 	ret_code_t err_code;
 	
-	int random_duration = get_random(0,m_blend_param.epoch_during_in_ms);
+	int random_duration = get_random(0,m_blend_param.epoch_length_ms);
 
 	err_code=app_timer_start(random_timer,APP_TIMER_TICKS(random_duration),NULL);
 	APP_ERROR_CHECK(err_code);
@@ -366,7 +366,7 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
 		if ((dis_flag == 0) && (epoch_count >= delay_epoches)){
 			found_device[now_device -1 ] = 1;
 			uint32_t time = app_timer_cnt_diff_compute(now_time,start_tick)- reduce_ticks;
-			time = APP_TIMER_MS(time) & 0xffff;
+			time = _BLEND_APP_TIMER_MS(time) & 0xffff;
 			payload [discover_index-2+now_device*2] = time >> 8;
 			payload [discover_index-1+now_device*2] = time & 0xff;
 			set_blend_data();
@@ -406,11 +406,6 @@ int main(void)
 	blend_init(m_blend_param, m_blend_handler);
 	bsp_board_led_on(BSP_BOARD_LED_0);
 	// Noop loop in order to randomize each device.
-	int i =0, j =0;
-	for (i = 0; i< 10000; i++){
-		j = i + APP_DEVICE_NUM;
-		//j = i;
-	}
 	
 	//Setting the blend payload. 
 	set_blend_data();

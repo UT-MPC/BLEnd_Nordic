@@ -15,6 +15,7 @@ $(OUTPUT_DIRECTORY)/nrf52840_xxaa.out: \
 # Source files common to all targets
 SRC_FILES += \
   $(LOCAL_SRCS) \
+  $(PROJ_ROOT)/src/blend/blend.c \
   $(SDK_DIR)/modules/nrfx/mdk/gcc_startup_nrf52840.S \
   $(SDK_DIR)/components/libraries/log/src/nrf_log_backend_rtt.c \
   $(SDK_DIR)/components/libraries/log/src/nrf_log_backend_serial.c \
@@ -72,6 +73,7 @@ SRC_FILES += \
 # Include folders common to all targets
 INC_FOLDERS += \
   ../config \
+  $(PROJ_ROOT)/src/blend \
   $(SDK_DIR)/components/nfc/ndef/generic/message \
   $(SDK_DIR)/components/nfc/t2t_lib \
   $(SDK_DIR)/components/nfc/t4t_parser/hl_detection_procedure \
@@ -226,7 +228,7 @@ CFLAGS += -DSOFTDEVICE_PRESENT
 CFLAGS += -DSWI_DISABLE0
 CFLAGS += -mcpu=cortex-m4
 CFLAGS += -mthumb -mabi=aapcs
-CFLAGS += -Wall -Werror
+CFLAGS += -Wall -O3 -g3
 CFLAGS += -mfloat-abi=hard -mfpu=fpv4-sp-d16
 # keep every function in a separate section, this allows linker to discard unused ones
 CFLAGS += -ffunction-sections -fdata-sections -fno-strict-aliasing

@@ -14,8 +14,8 @@ $(OUTPUT_DIRECTORY)/nrf52840_xxaa.out: \
 
 # Source files common to all targets
 SRC_FILES += \
-  $(LOCAL_SRC_DIR)/main.c \
-  $(SDK_DIR)/blend/blend.c \
+  $(LOCAL_SRCS) \
+  $(PROJ_ROOT)/src/blend/blend.c \
   $(SDK_DIR)/components/libraries/experimental_log/src/nrf_log_backend_rtt.c \
   $(SDK_DIR)/components/libraries/experimental_log/src/nrf_log_backend_serial.c \
   $(SDK_DIR)/components/libraries/experimental_log/src/nrf_log_default_backends.c \
