@@ -54,7 +54,7 @@
 // <4=> Debug 
 // BLEND_LOG_LEVEL
 #ifndef NRF_LOG_DEFAULT_LEVEL
-#define NRF_LOG_DEFAULT_LEVEL 0
+#define NRF_LOG_DEFAULT_LEVEL 2
 #endif
 // <<< Use Configuration Wizard in Context Menu >>>\n
 #ifdef USE_APP_CONFIG
