@@ -176,7 +176,6 @@ add_template_project()
     if [ "$SDK_VERSION" -le 1 ];then
 	proj_dir="${SDK_PATH}/examples/ble_central"
     else
-	thingy_sdk_change
 	proj_dir="${SDK_PATH}/project"
     fi
 
@@ -200,13 +199,15 @@ add_template_project()
 
 thingy_sdk_change()
 {
-    echo " Installing minor modifications in Thingy SDK..."
-    for (( i=0; i<${#THINGY_SDK_CHANGES[@]};i++));
-    do
-	src_dir="${THINGY_SDK_MOD_DIR}/${THINGY_SDK_CHANGES[$i]}"
-	cp -r "${src_dir}" "${SDK_PATH}"
-    done
-    echo "  Done."
+    if [ "$SDK_VERSION" -eq 2 ];then
+	echo " Installing minor modifications in Thingy SDK..."
+	for (( i=0; i<${#THINGY_SDK_CHANGES[@]};i++));
+	do
+	    src_dir="${THINGY_SDK_MOD_DIR}/${THINGY_SDK_CHANGES[$i]}"
+	    cp -r "${src_dir}" "${SDK_PATH}"
+	done
+	echo "  Done."
+    fi
 }
 
 finish()
@@ -238,6 +239,8 @@ version_select
 download_sdk
 
 add_blend_src
+
+thingy_sdk_change
 
 add_gps_mod
 
