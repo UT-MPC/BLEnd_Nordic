@@ -3,7 +3,8 @@ TARGETS          := nrf52840_xxaa
 OUTPUT_DIRECTORY := _build
 
 PROJ_ROOT := ../../../../../../..
-SDK_DIR := $(wildcard $(PROJ_ROOT)/sdk/nRF5_SDK_15*\/)
+ZIP_EXCLUDE = $(wildcard $(PROJ_ROOT)/sdk/*.zip)
+SDK_DIR := $(filter-out $(ZIP_EXCLUDE), $(wildcard $(PROJ_ROOT)/sdk/nRF5_SDK_15*))
 LOCAL_SRC_DIR := ../../..
 LOCAL_SRCS := $(wildcard $(LOCAL_SRC_DIR)/*.c) 
 
