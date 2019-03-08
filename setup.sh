@@ -169,13 +169,13 @@ add_gps_mod()
 	fi
     fi
 }
+
 add_template_project()
 {
     echo -e "\nCreating template project..."
     if [ "$SDK_VERSION" -le 1 ];then
 	proj_dir="${SDK_PATH}/examples/ble_central"
     else
-	thingy_sdk_change
 	proj_dir="${SDK_PATH}/project"
     fi
 
@@ -199,19 +199,22 @@ add_template_project()
 
 thingy_sdk_change()
 {
-    echo " Installing minor modifications in Thingy SDK..."
-    for (( i=0; i<${#THINGY_SDK_CHANGES[@]};i++));
-    do
-	src_dir="${THINGY_SDK_MOD_DIR}/${THINGY_SDK_CHANGES[$i]}"
-	cp -r "${src_dir}" "${SDK_PATH}"
-    done
-    echo "  Done."
+    if [ "$SDK_VERSION" -eq 2 ];then
+	echo " Installing minor modifications in Thingy SDK..."
+	for (( i=0; i<${#THINGY_SDK_CHANGES[@]};i++));
+	do
+	    src_dir="${THINGY_SDK_MOD_DIR}/${THINGY_SDK_CHANGES[$i]}"
+	    cp -r "${src_dir}" "${SDK_PATH}"
+	done
+	echo "  Done."
+    fi
 }
 
 finish()
 {
+    template_path="${ROOT_DIR}/${BLEND_TEMP_ORI_LOCATION}"
     echo -e "\n \033[1mAll done. You're now ready to compile the SDK and begin your" \
-	 "development (with the template project)\033[0m."
+	 "development (with the template project in ${template_path})\033[0m."
 
     if [ ! "$NRF_TOOL_INSTALLED" == true ]; then
 	echo -e "\n -[nRF5x Command Line Tools] is not installed. Follow ${TOOLCHAIN_URL}" \
@@ -237,8 +240,10 @@ download_sdk
 
 add_blend_src
 
+thingy_sdk_change
+
 add_gps_mod
 
-add_template_project
+#add_template_project
 
 finish
