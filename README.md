@@ -28,7 +28,7 @@ $> ./setup.sh
 See ```blend_param_t```
 
 ### Percom Demo (Stacon):
-> Run the setup script with option **2** and then check out `sdk/Nordic-Thingy52-FW-2.1.0/project/percom_demo`.
+> Run the setup script with option **2** and then check out `src/blend_project_templates/Thingy_IoT_SensorKit_v2.1.0/percom_demo`.
 
 ## Supported Hardware and SDKs
 During installation you will be asked to select one of the supported
@@ -52,7 +52,6 @@ Template project location:  (path_to_directory_on_your_disk)
  All done. You're now ready to compile the SDK and begin your development (with the template project).
 
 $> cd (path_to_directory_on_your_disk)/armgcc
-$> make
 $> make flash
 ```
 
