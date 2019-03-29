@@ -17,7 +17,7 @@
 #include "pca20020.h"
 #define	APP_TIMER_MS(TICKS) TICKS*(1000 * (APP_TIMER_CONFIG_RTC_FREQUENCY + 1))/(uint64_t) APP_TIMER_CLOCK_FREQ
 
-#define SOUND_LEVEL_NUM_FRAMES 33 //33*16ms
+#define SOUND_LEVEL_NUM_FRAMES 330 //33*16ms
 
 static gas_state_t m_gas_state = GAS_STATE_IDLE;
 static m_gas_baseline_t     * m_p_baseline;     ///< Baseline pointer.
@@ -236,11 +236,11 @@ uint32_t drv_mic_data_handler(m_audio_frame_t * p_frame)
     //float avg_noise_level = _acc_sound.acc_noise_level / (float)_acc_sound.acc_num_frames;
     //_sound_cache.sound_level = avg_noise_level;
 
-    _sound_cache.avg_peak = (int16_t) ((float) _acc_sound.acc_peak) / ((float) _acc_sound.acc_num_frames);
+    _sound_cache.avg_peak = (int16_t) (((float) _acc_sound.acc_peak) / ((float) _acc_sound.acc_num_frames));
     _sound_cache.max_peak = (int16_t) _acc_sound.running_peak;
-    _sound_cache.count_over_thres_per_frame = (int16_t) ((float) _acc_sound.acc_count_over_thres) / ((float) _acc_sound.acc_num_frames);
-    _sound_cache.avg_all =  (int16_t) ((float) _acc_sound.acc_avg_all) / ((float) _acc_sound.acc_num_frames);
-    _sound_cache.avg_over_thres = (int16_t) ((float) _acc_sound.acc_avg_over_thres) / (_acc_sound.num_frames_over_thres);
+    _sound_cache.count_over_thres_per_frame = (int16_t) (((float) _acc_sound.acc_count_over_thres) / ((float) _acc_sound.acc_num_frames));
+    _sound_cache.avg_all =  (int16_t) (((float) _acc_sound.acc_avg_all) / ((float) _acc_sound.acc_num_frames));
+    _sound_cache.avg_over_thres = (int16_t) (((float) _acc_sound.acc_avg_over_thres) / (_acc_sound.num_frames_over_thres));
     _sound_cache.timestamp_ms = APP_TIMER_MS(app_timer_cnt_get());
 
     NRF_LOG_DEBUG("drv_mic_data_handler count_over_thres = %d \r\n: ", count_over_thres);
@@ -261,6 +261,8 @@ uint32_t drv_mic_data_handler(m_audio_frame_t * p_frame)
     _acc_sound.num_frames_over_thres = 0;
     _acc_sound.acc_avg_all = 0;
     _acc_sound.acc_avg_over_thres = 0;
+
+    m_sound_disable();
 
   }
   return NRF_SUCCESS;
