@@ -32,7 +32,7 @@ color_t _color_cache;
 gas_t _gas_cache;
 sound_t _sound_cache;
 
-acc_sound_t _acc_sound = {0, 0, 0, 0, 0, 0, 0.0f, 0.0f};
+acc_sound_t _acc_sound = {0, 0, 0, 0, 0, 0.0f, 0.0f};
 
 static color_config_t m_color_config = COLOR_CONFIG_DEFAULT;
 
@@ -48,7 +48,7 @@ void m_humidity2str(void* humid_p, char* str) {
 
 void m_pressure2str(void* pressure_p, char* str) {
   pressure_t pressure_in = *((pressure_t*)pressure_p);
-  sprintf(str, "Pressure: %ld.%d hPa\r\n", pressure_in.integer, pressure_in.decimal);
+  sprintf(str, "Pressure: %d.%d hPa\r\n", pressure_in.integer, pressure_in.decimal);
 }
 
 void m_color2str(void* color_p, char* str) {
@@ -94,7 +94,7 @@ static void humidity_conv_data(uint8_t humid, humidity_t * p_out_humid) {
 static void pressure_conv_data(float in_press, pressure_t * p_out_press) {
   float f_decimal;
 
-  p_out_press->integer = (int32_t)in_press;
+  p_out_press->integer = (int16_t)in_press;
   f_decimal = in_press - p_out_press->integer;
   p_out_press->decimal = (uint8_t)(f_decimal * 100.0f);
   p_out_press->timestamp_ms = APP_TIMER_MS(app_timer_cnt_get());
@@ -206,11 +206,11 @@ void drv_gas_evt_handler(drv_gas_sensor_data_t const * p_data)
 uint32_t drv_mic_data_handler(m_audio_frame_t * p_frame)
 {
   
-  float noise_level = ((float *)p_frame->data)[0];
-  int peak_in_frame = *(int *)(p_frame->data + 4);
-  int count_over_thres = *(int *)(p_frame->data + 8);
-  float avg_all_samples = *(float *)(p_frame->data + 12);
-  float avg_over_thres_samples = *(float *)(p_frame->data + 16);
+  //float noise_level = ((float *)p_frame->data)[0];
+  int peak_in_frame = *(int *)(p_frame->data);
+  int count_over_thres = *(int *)(p_frame->data + 4);
+  float avg_all_samples = *(float *)(p_frame->data + 8);
+  float avg_over_thres_samples = *(float *)(p_frame->data + 12);
   //int num_samples = *(int *)(p_frame->data + 20);
 
   // NRF_LOG_DEBUG("drv_mic_data_handler peak_in_frame = %d \r\n: ", peak_in_frame);

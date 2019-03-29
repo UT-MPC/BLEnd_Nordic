@@ -27,7 +27,7 @@ const uint64_t context_valid_duraion_s[] = {VALID_DURATION_TEMP_S, VALID_DURATIO
 sensor2ctx_func_t sensor2ctx_func[] = {temp2ctx, humid2ctx, pressure2ctx, color2ctx, gas2ctx, sound2ctx};
 ctx2sensor_func_t ctx2sensor_func[] = {ctx2temp, ctx2humid, ctx2pressure, ctx2color, ctx2gas, ctx2sound};
 sensor_sample_func_t sensor_start_func[] = {m_humidity_sample, m_humidity_sample, m_pressure_sample, m_color_sample, m_gas_sample, m_sound_sample};
-sensor_read_func_t sensor_read_func[] = {m_temperature_read, m_humidity_read, m_pressure_read, m_color_read, m_gas_read, m_sound_read};
+sensor_read_func_t sensor_read_func[] = {m_sound_read, m_temperature_read, m_humidity_read, m_pressure_read, m_gas_read, m_color_read};
 sensor_disable_func_t sensor_stop_func[] = {m_humidity_disable, m_humidity_disable, m_pressure_disable, m_color_disable, m_gas_disable, m_sound_disable};
 sensor2str_func_t sensor2str_func[] = {m_temperature2str, m_humidity2str, m_pressure2str, m_color2str, m_gas2str, m_sound2str};
 
@@ -151,6 +151,38 @@ context_t context_read(uint8_t ctx_type){
   sensor2ctx_func[ctx_type](*cur_sensor_ptr, &new_context);
   free(cur_sensor_ptr);
   return new_context;
+}
+
+void context_all_to_bytes(uint8_t* bytes_temp, context_all_t* context_all){ 
+  union {
+    context_all_t a;
+    unsigned char bytes[CONTEXT_ALL_SIZE];
+  } thing;
+  thing.a = *context_all;
+  memcpy(bytes_temp, thing.bytes, CONTEXT_ALL_SIZE);
+}
+
+context_all_t* context_read_all(){
+  context_all_t* context_all;
+  context_all = malloc(sizeof(context_all_t));
+
+  void ** cur_sensor_ptr = malloc(sizeof(void*));
+  
+  m_sound_read(cur_sensor_ptr);
+  context_all->sound = *((sound_t*)*cur_sensor_ptr);
+  m_temperature_read(cur_sensor_ptr);
+  context_all->temperature = *((temperature_t*)*cur_sensor_ptr);
+  m_humidity_read(cur_sensor_ptr);
+  context_all->humidity = *((humidity_t*)*cur_sensor_ptr);
+  m_pressure_read(cur_sensor_ptr);
+  context_all->pressure = *((pressure_t*)*cur_sensor_ptr);
+  m_gas_read(cur_sensor_ptr);
+  context_all->gas = *((gas_t*)*cur_sensor_ptr);
+
+  free(cur_sensor_ptr);
+
+  return context_all;
+
 }
 
 void context_start(uint8_t ctx_type){

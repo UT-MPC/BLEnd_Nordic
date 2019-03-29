@@ -82,8 +82,6 @@
 #include "support_func.h"
 #include "twi_manager.h"
 
-#include "m_motion.h"
-
 //! Value used as error code on stack dump, can be used to identify stack location on stack unwind.
 #define DEAD_BEEF 0xDEADBEEF
 //! Maximum size of scheduler events.
@@ -149,7 +147,7 @@ uint64_t last_updated_lambda_ms;
 /*!< Sensing related functions */
 uint32_t update_sensing_task(void);
 uint32_t initiate_sensing_task(void);
-uint32_t read_result_update_payload(void);
+void read_result_update_payload(void);
 uint32_t switch_sensing_task(void);
 
 /*!< AfterScan as in Stacon */
@@ -215,7 +213,6 @@ static void power_manage(void) {
 static void thingy_init(void) {
   uint32_t                 err_code;
   m_ui_init_t              ui_params;
-  m_motion_init_t          motion_params;
   m_ble_init_t             ble_params;
   batt_meas_init_t         batt_meas_init = BATT_MEAS_PARAM_CFG;
 
@@ -313,7 +310,7 @@ uint32_t rng_rand(int start,int end) {
  *
  * @return Return status.
  */
-uint32_t update_payload(context_t context_in, uint8_t* payload) {
+// uint32_t update_payload(context_t context_in) {
   // For debug purpose
   /* if (current_task_type == (NOISE_CTX + TASK_OFFSET)) { */
   /*   float val = 0; */
@@ -327,35 +324,42 @@ uint32_t update_payload(context_t context_in, uint8_t* payload) {
   /* } */
   
   //uint8_t sharing_type, uint32_t ctx_val1, uint32_t ctx_val2, uint8_t* payload
-  payload[0] = PROTOCOL_ID;
-  payload[1] = DEVICE_ID;
-  payload[2] = localhost->cap_vec & 0xFF; // Little endian
-  payload[3] = (localhost->cap_vec >> 8);
-  payload[4] = (localhost->demand_vec >> 8);
-  payload[5] = localhost->demand_vec & 0xFF;
-  if (current_task_type >= TASK_OFFSET) {
-    payload[6] = current_task_type;
-    uint8_t* vp = (uint8_t*) &(context_in.value1);
-    for (int i = 0; i < 4; ++i) {
-      payload[7+i] = vp[i];
-    }
-    vp = (uint8_t*) &(context_in.value2);
-    for (int i = 0; i < 4; ++i) {
-      payload[11+i] = vp[i];
-    }
-  } else {
-    memset(&payload[6], 0, 9*sizeof(uint8_t));
-  }
-  payload[15] = batt_lvl_read;
 
-  m_blend_data.data_length = DATA_LENGTH;
-  m_blend_data.data = payload;
-  if (blend_advdata_set(&m_blend_data) != BLEND_NO_ERROR) {
-    NRF_LOG_ERROR("Blend data set error");
-    return 1;
-  }
-  return 0;
-}
+
+  // payload[0] = PROTOCOL_ID;
+  // payload[1] = DEVICE_ID;
+  // payload[2] = localhost->cap_vec & 0xFF; // Little endian
+  // payload[3] = (localhost->cap_vec >> 8);
+  // payload[4] = (localhost->demand_vec >> 8);
+  // payload[5] = localhost->demand_vec & 0xFF;
+  // if (current_task_type >= TASK_OFFSET) {
+  //   payload[6] = current_task_type;
+  //   uint8_t* vp = (uint8_t*) &(context_in.value1);
+  //   for (int i = 0; i < 4; ++i) {
+  //     payload[7+i] = vp[i];
+  //   }
+  //   vp = (uint8_t*) &(context_in.value2);
+  //   for (int i = 0; i < 4; ++i) {
+  //     payload[11+i] = vp[i];
+  //   }
+  // } else {
+  //   memset(&payload[6], 0, 9*sizeof(uint8_t));
+  // }
+  // payload[15] = batt_lvl_read;
+
+
+
+  // m_blend_data.data_length = DATA_LENGTH;
+  // m_blend_data.data = payload;
+  // if (blend_advdata_set(&m_blend_data) != BLEND_NO_ERROR) {
+  //   NRF_LOG_ERROR("Blend data set error");
+  //   return 1;
+  // }
+  // return 0;
+
+  // TODO: Set Prefix to byte 0
+
+// }
 
 /**@brief Initialize the node's sensing equipment and tasks.
 */
@@ -368,7 +372,7 @@ uint32_t middleware_init(void) {
   //SetBit(localhost->cap_vec, 1);
   //SetBit(localhost->cap_vec, 2);
   // SetBit(localhost->cap_vec, 3);
-  // SetBit(localhost->cap_vec, 4);
+  //SetBit(localhost->cap_vec, 4);
   SetBit(localhost->cap_vec, 5);
   localhost->demand_vec = 0xFFFF;
   localhost->next = NULL;
@@ -428,19 +432,49 @@ uint32_t initiate_sensing_task(void) {
 /**@brief Retrieve the sensor reading and update the beacon content, if current task is valid.
  * @details context_read might pause the sampling process if necessary.
  */
-uint32_t read_result_update_payload(void) {
-  if (current_task_type >= TASK_OFFSET) {
-    if (!sample_initiated) {
-      return 0;
-    }
-    saved_reading = context_read(current_task_type - TASK_OFFSET);
-    context_pause(current_task_type - TASK_OFFSET);
+void read_result_update_payload(void) {
+
+  //TODO: update payload
+  context_all_t* context_all = context_read_all();
+
+  // Just a test below
+  int16_t max_peak = context_all->sound.max_peak;
+  NRF_LOG_DEBUG("read_result_update_payload (context) max_peak = %d \r\n: ", max_peak);
+
+  uint8_t payload[CONTEXT_ALL_SIZE + 2];
+
+  payload[0] = 0; //TODO: make this the prefix
+  context_all_to_bytes((uint8_t*)(payload + 1),context_all);
+  payload[sizeof(payload) - 1] = batt_lvl_read;
+
+  free(context_all);
+
+  // Just a test below
+  sound_t sound = *(sound_t *)(payload + 1);
+  max_peak = sound.max_peak;
+  NRF_LOG_DEBUG("read_result_update_payload (payload) max_peak = %d \r\n: ", max_peak);
+  
+  m_blend_data.data_length = sizeof(payload);
+  m_blend_data.data = payload;
+  if (blend_advdata_set(&m_blend_data) != BLEND_NO_ERROR) {
+    NRF_LOG_ERROR("Blend data set error");
+    //return 1;
   }
-  if (update_payload(saved_reading, payload)) {
-    NRF_LOG_ERROR("Error when updating beacon payload.");
-  }
-  sample_initiated = false;
-  return 0;
+  //return 0;
+
+
+  // if (current_task_type >= TASK_OFFSET) {
+  //   if (!sample_initiated) {
+  //     return 0;
+  //   }
+  //   saved_reading = context_read(current_task_type - TASK_OFFSET);
+  //   context_pause(current_task_type - TASK_OFFSET);
+  // }
+  // if (update_payload(saved_reading, payload)) {
+  //   NRF_LOG_ERROR("Error when updating beacon payload.");
+  // }
+  // sample_initiated = false;
+  // return 0;
 }
 
 /**@brief Update LED visualization and stop the previous sensor.

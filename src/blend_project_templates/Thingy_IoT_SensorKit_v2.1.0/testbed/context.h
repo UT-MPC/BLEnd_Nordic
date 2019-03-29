@@ -28,6 +28,8 @@
 #define TestBit(A,k) (A & (1 << (k%NUM_CONTEXT_TYPES)))
 // Extend to larger range using an array: (A[(k/NUM_CONTEXT_TYPES)] |= (1 << (k%NUM_CONTEXT_TYPES)))
 
+#define CONTEXT_ALL_SIZE 20
+
 // Constants for noise measurement
 // #define MICROPHONE_ADPCM_RAW_THRESHOLD 20
 
@@ -53,6 +55,16 @@ typedef struct {
   uint64_t timestamp_ms; /*!< Received time in microseconds. */
 } context_t;
 
+typedef struct {
+
+  sound_t sound;
+  temperature_t temperature;
+  humidity_t humidity;
+  pressure_t pressure;
+  gas_t gas;
+
+} context_all_t;
+
 /*! \brief Structure of the exchange packets.
  */
 typedef struct {
@@ -69,6 +81,8 @@ typedef void (*ctx2sensor_func_t) (context_t* , void**);
 
 void context_start(uint8_t ctx_tye);
 context_t context_read(uint8_t ctx_tye);
+void context_all_to_bytes(uint8_t* bytes_temp, context_all_t* context_all);
+context_all_t* context_read_all();
 uint32_t context_stop(uint8_t ctx_type);
 void context_pause(uint8_t ctx_tye);
 

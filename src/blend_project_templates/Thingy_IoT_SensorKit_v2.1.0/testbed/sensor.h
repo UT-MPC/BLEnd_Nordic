@@ -24,7 +24,7 @@ typedef struct {
 }humidity_t;
 
 typedef struct {
-  int32_t  integer;
+  int16_t  integer;
   uint8_t  decimal;
   uint32_t timestamp_ms;
 } pressure_t;
