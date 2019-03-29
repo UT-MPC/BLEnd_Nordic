@@ -91,11 +91,21 @@
 #define ENERGY_SAVING_SENSING 0 /*!< 1-true, 0-false */
 #define BATTERY_PROFILING 0 /*!< 1-true, 0-false */
 
+#define SAMPLE_TIMER_WARMUP_MS 50
+#define SAMPLE_INTERVAL_MS 20000
+#define SAMPLE_TIMER_SAMPLE_ON_MS 3000
+#define SAMPLE_TIMER_SAMPLE_OFF_MS SAMPLE_INTERVAL_MS - SAMPLE_TIMER_SAMPLE_ON_MS
+
+APP_TIMER_DEF (sampling_timer);
+
 /* === Section (BLEnd parameters) === */
+
 const uint16_t lambda_ms = 4000;
 const uint16_t epoch_length_ms = 1328;
 const uint16_t adv_interval_ms = 127;
+
 /* === End of Section (BLEnd parameters) === */
+
 
 uint8_t payload[DATA_LENGTH];
 static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
@@ -108,13 +118,22 @@ bool discover_mode = true;
 bool sample_initiated = false;
 uint8_t batt_lvl_read = 0; /*!< Most recent read of battery level. */
 
+
 /* === Section (Function Prototypes) === */
 
 /*!< Sensing related functions */
 uint32_t initiate_sensing_task(void);
 void read_result_update_payload(void);
+void app_init(void);
+void app_start(void);
+
+/*!< Callback functions */
+static void m_blend_handler(blend_evt_t * p_blend_evt);
+static void m_batt_meas_handler(m_batt_meas_event_t const * p_batt_meas_event);
+void sampling_timer_handler(void);
 
 /* === End of Section (Function Prototypes) === */
+
 
 /* === Section (Board Functions) === */
 
@@ -219,7 +238,7 @@ static void board_init(void) {
 */
 void batt_init(){
   uint32_t err_code;
-  batt_meas_init_t         batt_meas_init = BATT_MEAS_PARAM_CFG;
+  batt_meas_init_t batt_meas_init = BATT_MEAS_PARAM_CFG;
   batt_meas_init.evt_handler = m_batt_meas_handler;
   err_code = m_batt_meas_init(&m_ble_service_handles[THINGY_SERVICE_BATTERY], &batt_meas_init);
   APP_ERROR_CHECK(err_code);
@@ -230,8 +249,7 @@ void batt_init(){
 
 /**@brief Sensor initialization.
 */
-void sensor_init()
-{
+void sensor_init() {
   humidity_sensor_init(&m_twi_sensors);
   pressure_sensor_init(&m_twi_sensors);
   color_sensor_init(&m_twi_sensors);
@@ -239,38 +257,15 @@ void sensor_init()
   sound_init();
 }
 
-static void timer_init(void)
-{
+static void timer_init(void) {
   ret_code_t err_code = app_timer_init();
   APP_ERROR_CHECK(err_code);
 }
 
 /* === End of Section (Board Functions) === */
 
-/**@brief Initialize the node's sensing equipment and tasks.
-*/
-uint32_t middleware_init(void) {
-  /* localhost = malloc(sizeof(node_t)); */
-  /* localhost->node_id = DEVICE_ID; */
-  /* // TODO(liuchg): randomized init. for capabilities. */
-  /* localhost->cap_vec = 0; */
-  /* //SetBit(localhost->cap_vec, 0); */
-  /* //SetBit(localhost->cap_vec, 1); */
-  /* //SetBit(localhost->cap_vec, 2); */
-  /* // SetBit(localhost->cap_vec, 3); */
-  /* //SetBit(localhost->cap_vec, 4); */
-  /* SetBit(localhost->cap_vec, 5); */
-  /* localhost->demand_vec = 0xFFFF; */
-  /* localhost->next = NULL; */
 
-  //  current_task_type = TASK_IDLE;
-  //prev_task_type = 0xff;
-
-  //last_updated_lambda_ms = 999; // Anything greater than first scan after
-  //last_sample_time_ms = 999;
-  
-  return 0;
-}
+/* === Section (Function Prototypes Implementation) === */
 
 /**@brief Initiate all sensor sampling.
  */
@@ -313,10 +308,26 @@ void read_result_update_payload(void) {
   }
 }
 
+/**@brief Initialize the node's sensing equipments, app timer.
+*/
+void app_init(void) {
+  uint32_t err_code = app_timer_create(&sampling_timer, APP_TIMER_MODE_SINGLE_SHOT, sampling_timer_handler);
+  APP_ERROR_CHECK(err_code);
+
+  sample_initiated = false;
+}
+
+/**@brief Start timers.
+*/
+void app_start(void) {
+  blend_sched_start();
+  uint32_t err_code = app_timer_start(sampling_timer, APP_TIMER_TICKS(SAMPLE_TIMER_WARMUP_MS), NULL);
+  APP_ERROR_CHECK(err_code);
+}
+
 /**@brief Blend soft interrupt handlers (No use in testbed for now).
 */
-static void m_blend_handler(blend_evt_t * p_blend_evt)
-{
+static void m_blend_handler(blend_evt_t * p_blend_evt) {
   //  NRF_LOG_DEBUG("m_blend_handler:%d, (%d ms).\r\n",p_blend_evt->evt_id, _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
   switch (p_blend_evt->evt_id) {
   case BLEND_EVT_ADV_REPORT: {
@@ -334,8 +345,7 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
   }
 }
 
-static void m_batt_meas_handler(m_batt_meas_event_t const * p_batt_meas_event)
-{
+static void m_batt_meas_handler(m_batt_meas_event_t const * p_batt_meas_event) {
   NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN"Voltage: %d V, Charge: %d %%, Event type: %d \r\n",
               p_batt_meas_event->voltage_mv, p_batt_meas_event->level_percent, p_batt_meas_event->type);
   batt_lvl_read = p_batt_meas_event->level_percent;
@@ -360,6 +370,30 @@ static void m_batt_meas_handler(m_batt_meas_event_t const * p_batt_meas_event)
   }
 }
 
+/**@brief App timer callback handler for controlling the start and end of sensor sampling.
+ * @details Implicit input: sample_initiated(flag)
+ */
+void sampling_timer_handler(void) {
+  ret_code_t ret = app_timer_stop(sampling_timer);
+  APP_ERROR_CHECK(ret);
+  uint64_t next_timer_ms = 999;
+  if (sample_initiated) {
+    // Update payload
+    sample_initiated = false;
+    next_timer_ms = SAMPLE_TIMER_SAMPLE_OFF_MS;
+    NRF_LOG_DEBUG("sampling_timer_handler: turn off sampling at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
+  } else {
+    sample_initiated = true;
+    next_timer_ms = SAMPLE_TIMER_SAMPLE_ON_MS;
+    NRF_LOG_DEBUG("sampling_timer_handler: start sampling at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
+  }
+  ret = app_timer_start(sampling_timer, APP_TIMER_TICKS(next_timer_ms), NULL);
+  APP_ERROR_CHECK(ret);
+}
+
+/* === Section (Function Prototypes Implementation) === */
+
+
 int main(void) {
   uint32_t err_code;
   err_code = NRF_LOG_INIT(NULL);
@@ -380,8 +414,9 @@ int main(void) {
   sensor_init();
   blend_init(m_blend_param, m_blend_handler, m_ble_service_handles);
   batt_init();
+  app_init();
 
-  middleware_init();
+  app_start();
     
   for (;;) {
     app_sched_execute();
