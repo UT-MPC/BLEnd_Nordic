@@ -63,12 +63,9 @@
 #include "blend.h"
 #include "context.h"
 #include "drv_ext_gpio.h"
-#include "drv_ext_light.h"
-#include "light_control.h"
 #include "m_batt_meas.h"
 #include "m_ble.h"
 #include "m_ui.h"
-#include "matching.h"
 #include "node.h"
 #include "nordic_common.h"
 #include "nrf.h"
@@ -109,7 +106,6 @@ const uint16_t adv_interval_ms = 127;
 
 uint8_t payload[DATA_LENGTH];
 static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
-static const ble_uis_led_t led_colors[7] = {LED_CONFIG_WHITE, LED_CONFIG_YELLOW, LED_CONFIG_GREEN, LED_CONFIG_PURPLE, LED_CONFIG_BLUE, LED_CONFIG_PINK, LED_CONFIG_RED};
 static const nrf_drv_twi_t m_twi_sensors = NRF_DRV_TWI_INSTANCE(TWI_SENSOR_INSTANCE);
 const ctx_type_def enabled_sensors[5] = {TEMP_CTX, HUMID_CTX, PRESS_CTX, VOC_CTX, NOISE_CTX};
 
