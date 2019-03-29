@@ -182,7 +182,6 @@ context_all_t* context_read_all(){
   free(cur_sensor_ptr);
 
   return context_all;
-
 }
 
 void context_start(uint8_t ctx_type){

@@ -42,7 +42,7 @@ typedef enum
     VOC_CTX,
     NOISE_CTX,
     LOCATION_CTX,
-}ctx_type_def;
+} ctx_type_def;
 
 /*! \brief Structure for context values.
  */

@@ -91,19 +91,19 @@
 #define ENERGY_SAVING_SENSING 0 /*!< 1-true, 0-false */
 #define BATTERY_PROFILING 0 /*!< 1-true, 0-false */
 
+/* === Section (Sampling schedule parameters) === */
 #define SAMPLE_TIMER_WARMUP_MS 50
-#define SAMPLE_INTERVAL_MS 20000
-#define SAMPLE_TIMER_SAMPLE_ON_MS 3000
+#define SAMPLE_INTERVAL_MS 300000
+#define SAMPLE_TIMER_SAMPLE_ON_MS 30000
 #define SAMPLE_TIMER_SAMPLE_OFF_MS SAMPLE_INTERVAL_MS - SAMPLE_TIMER_SAMPLE_ON_MS
+/* === End of Section (Sampling schedule parameters) === */
 
 APP_TIMER_DEF (sampling_timer);
 
 /* === Section (BLEnd parameters) === */
-
 const uint16_t lambda_ms = 4000;
 const uint16_t epoch_length_ms = 1328;
 const uint16_t adv_interval_ms = 127;
-
 /* === End of Section (BLEnd parameters) === */
 
 
@@ -111,6 +111,7 @@ uint8_t payload[DATA_LENGTH];
 static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
 static const ble_uis_led_t led_colors[7] = {LED_CONFIG_WHITE, LED_CONFIG_YELLOW, LED_CONFIG_GREEN, LED_CONFIG_PURPLE, LED_CONFIG_BLUE, LED_CONFIG_PINK, LED_CONFIG_RED};
 static const nrf_drv_twi_t m_twi_sensors = NRF_DRV_TWI_INSTANCE(TWI_SENSOR_INSTANCE);
+const ctx_type_def enabled_sensors[5] = {TEMP_CTX, HUMID_CTX, PRESS_CTX, VOC_CTX, NOISE_CTX};
 
 blend_data_t m_blend_data; /*!< Complete user payload. */
 uint8_t on_scan_flag  = 0;
@@ -122,8 +123,8 @@ uint8_t batt_lvl_read = 0; /*!< Most recent read of battery level. */
 /* === Section (Function Prototypes) === */
 
 /*!< Sensing related functions */
-uint32_t initiate_sensing_task(void);
-void read_result_update_payload(void);
+uint32_t initiate_sampling(void);
+void stop_sampling_update_payload(void);
 void app_init(void);
 void app_start(void);
 
@@ -269,42 +270,45 @@ static void timer_init(void) {
 
 /**@brief Initiate all sensor sampling.
  */
-uint32_t initiate_sensing_task(void) {
-  //TODO(liuchg): Start all sampling.
+uint32_t initiate_sampling(void) {
+  NRF_LOG_DEBUG("initiate_sampling: start sampling at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
+
+  for (int i = 0; i < sizeof(enabled_sensors)/sizeof(ctx_type_def); ++i) {
+    context_start(enabled_sensors[i]);
+  }
   sample_initiated = true;
+
   return 0;
 }
 
-/**@brief Retrieve the sensor reading and update the beacon content, if current task is valid.
- * @details context_read might pause the sampling process if necessary.
+/**@brief Retrieve the sensor readings and update the beacon content.
+ * @details Stop all sensors at the end.
  */
-void read_result_update_payload(void) {
+void stop_sampling_update_payload(void) {
+  NRF_LOG_DEBUG("stop_sampling_update_payload: turn off sampling at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
+
+  for (int i = 0; i < sizeof(enabled_sensors)/sizeof(ctx_type_def); ++i) {
+    context_stop(enabled_sensors[i]);
+  }
 
   //TODO: update payload
   context_all_t* context_all = context_read_all();
-
-  // Just a test below
   int16_t max_peak = context_all->sound.max_peak;
-  NRF_LOG_DEBUG("read_result_update_payload (context) max_peak = %d \r\n: ", max_peak);
-
-  uint8_t payload[CONTEXT_ALL_SIZE + 2];
-
-  payload[0] = 0; //TODO: make this the prefix
-  context_all_to_bytes((uint8_t*)(payload + 1),context_all);
+  uint8_t payload[CONTEXT_ALL_SIZE + 1];
+  //payload[0] = 0; //TODO: make this the prefix
+  context_all_to_bytes((uint8_t*)(payload), context_all);
   payload[sizeof(payload) - 1] = batt_lvl_read;
-
   free(context_all);
 
   // Just a test below
-  sound_t sound = *(sound_t *)(payload + 1);
-  max_peak = sound.max_peak;
-  NRF_LOG_DEBUG("read_result_update_payload (payload) max_peak = %d \r\n: ", max_peak);
+  // sound_t sound = *(sound_t *)(payload + 1);
+  // max_peak = sound.max_peak;
+  // NRF_LOG_DEBUG("stop_sampling_update_payload (payload) max_peak = %d \r\n: ", max_peak);
   
   m_blend_data.data_length = sizeof(payload);
   m_blend_data.data = payload;
   if (blend_advdata_set(&m_blend_data) != BLEND_NO_ERROR) {
     NRF_LOG_ERROR("Blend data set error");
-    //return 1;
   }
 }
 
@@ -354,13 +358,10 @@ static void m_batt_meas_handler(m_batt_meas_event_t const * p_batt_meas_event) {
     if( p_batt_meas_event->type == M_BATT_MEAS_EVENT_LOW)
     {
       uint32_t err_code;
-
       err_code = support_func_configure_io_shutdown();
       APP_ERROR_CHECK(err_code);
-      
       // Enable wake on USB detect only.
       nrf_gpio_cfg_sense_input(USB_DETECT, NRF_GPIO_PIN_NOPULL, NRF_GPIO_PIN_SENSE_HIGH);
-
       NRF_LOG_WARNING("Battery voltage low, shutting down Thingy. Connect USB to charge \r\n");
       NRF_LOG_FINAL_FLUSH();
       // Go to system-off mode (This function will not return; wakeup will cause a reset).
@@ -378,14 +379,13 @@ void sampling_timer_handler(void) {
   APP_ERROR_CHECK(ret);
   uint64_t next_timer_ms = 999;
   if (sample_initiated) {
-    // Update payload
+    stop_sampling_update_payload();
     sample_initiated = false;
     next_timer_ms = SAMPLE_TIMER_SAMPLE_OFF_MS;
-    NRF_LOG_DEBUG("sampling_timer_handler: turn off sampling at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
   } else {
+    initiate_sampling();
     sample_initiated = true;
     next_timer_ms = SAMPLE_TIMER_SAMPLE_ON_MS;
-    NRF_LOG_DEBUG("sampling_timer_handler: start sampling at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
   }
   ret = app_timer_start(sampling_timer, APP_TIMER_TICKS(next_timer_ms), NULL);
   APP_ERROR_CHECK(ret);
