@@ -91,7 +91,7 @@
 /* === Section (Sampling schedule parameters) === */
 /* Start => Early stop => Gas stop => Next Start */
 #define SAMPLE_TIMER_WARMUP_MS 50
-#define SAMPLE_INTERVAL_MS 80000
+#define SAMPLE_INTERVAL_MS 300000
 #define SAMPLE_TIMER_SAMPLE_EARLY_STOP_MS 5000
 #define SAMPLE_TIMER_SAMPLE_GAS_MS 30000
 #define MICROPHONE_TIMER_INTERVAL_MS 20000 // 10s auto-stoped sampling period followed 10s rest
@@ -292,7 +292,7 @@ void stop_sampling_update_payload(void) {
     gas_unfinished = false;
   } else {
     for (int i = 0; i < sizeof(enabled_sensors)/sizeof(ctx_type_def); ++i) {
-      if (enabled_sensors[i] != VOC_CTX) {
+      if (enabled_sensors[i] != VOC_CTX && enabled_sensors[i] != NOISE_CTX) {
 	context_stop(enabled_sensors[i]);
       }
     }
@@ -392,17 +392,17 @@ void sampling_timer_handler(void) {
     stop_sampling_update_payload();
     if (gas_unfinished) {
       next_timer_ms = SAMPLE_TIMER_SAMPLE_GAS_MS - SAMPLE_TIMER_SAMPLE_EARLY_STOP_MS;
-      NRF_LOG_DEBUG("sampling_timer_handler: Turning off all sensors except gas and mic at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
+      //NRF_LOG_DEBUG("sampling_timer_handler: Turning off all sensors except gas and mic at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
     } else {
       sample_initiated = false;
       next_timer_ms = SAMPLE_INTERVAL_MS - SAMPLE_TIMER_SAMPLE_GAS_MS;
-      NRF_LOG_DEBUG("sampling_timer_handler: Turning off gas sensor at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
+      //NRF_LOG_DEBUG("sampling_timer_handler: Turning off gas sensor at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
     }
   } else {
     initiate_sampling();
     sample_initiated = true;
     next_timer_ms = SAMPLE_TIMER_SAMPLE_EARLY_STOP_MS;
-    NRF_LOG_DEBUG("sampling_timer_handler: Start all sampling at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
+    //NRF_LOG_DEBUG("sampling_timer_handler: Start all sampling at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
   }
   ret = app_timer_start(sampling_timer, APP_TIMER_TICKS(next_timer_ms), NULL);
   APP_ERROR_CHECK(ret);
@@ -413,7 +413,7 @@ void mic_timer_handler(void) {
   update_payload();
   // Restart mic. sampling
   context_start(NOISE_CTX);
-  NRF_LOG_DEBUG("sampling_timer_handler: Turning on mic at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
+  //NRF_LOG_DEBUG("sampling_timer_handler: Turning on mic at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
 }
 /* === Section (Function Prototypes Implementation) === */
 
