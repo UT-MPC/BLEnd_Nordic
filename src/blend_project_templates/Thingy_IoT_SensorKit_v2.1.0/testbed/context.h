@@ -55,7 +55,7 @@ typedef struct {
   uint64_t timestamp_ms; /*!< Received time in microseconds. */
 } context_t;
 
-#pragma pack(1)
+#pragma pack(push, 1)
 typedef struct {
 
   //sound_t sound;
@@ -73,15 +73,15 @@ typedef struct {
   uint8_t humid;
 
   //pressure_t pressure;
-  int16_t  pressure_integer;
   uint8_t  pressure_decimal;
+  int16_t  pressure_integer;
 
   //gas_t gas;
   uint16_t ec02_ppm; ///< The equivalent CO2 (eCO2) value in parts per million (ppm).
   uint16_t tvoc_ppb; ///< The Total Volatile Organic Compound (TVOC) value in parts per billion (ppb).
 
 } context_all_t;
-
+#pragma pack(pop)
 /*! \brief Structure of the exchange packets.
  */
 typedef struct {
