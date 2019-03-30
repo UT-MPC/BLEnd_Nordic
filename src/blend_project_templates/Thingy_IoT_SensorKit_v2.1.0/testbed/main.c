@@ -325,7 +325,6 @@ void app_start(void) {
 
 void update_payload() {
   context_all_t* context_all = context_read_all();
-  int16_t max_peak = context_all->sound.max_peak;
   uint8_t payload[CONTEXT_ALL_SIZE + 1];
   context_all_to_bytes((uint8_t*)(payload), context_all);
   payload[sizeof(payload) - 1] = batt_lvl_read;
@@ -421,6 +420,8 @@ void mic_timer_handler(void) {
 int main(void) {
   uint32_t err_code;
   err_code = NRF_LOG_INIT(NULL);
+
+  //NRF_LOG_DEBUG("size context_all_t struct with pragma: %d", sizeof(context_all_t));
   APP_ERROR_CHECK(err_code);
   timer_init();
 

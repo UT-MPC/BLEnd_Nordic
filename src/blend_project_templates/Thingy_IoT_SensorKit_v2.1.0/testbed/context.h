@@ -55,13 +55,30 @@ typedef struct {
   uint64_t timestamp_ms; /*!< Received time in microseconds. */
 } context_t;
 
+#pragma pack(1)
 typedef struct {
 
-  sound_t sound;
-  temperature_t temperature;
-  humidity_t humidity;
-  pressure_t pressure;
-  gas_t gas;
+  //sound_t sound;
+  int16_t avg_peak;
+  int16_t max_peak;
+  int16_t count_over_thres_per_frame;
+  int16_t avg_all;
+  int16_t avg_over_thres; 
+
+  //temperature_t temperature;
+  int8_t  temp_integer;
+  uint8_t temp_decimal;
+
+  //humidity_t humidity;
+  uint8_t humid;
+
+  //pressure_t pressure;
+  int16_t  pressure_integer;
+  uint8_t  pressure_decimal;
+
+  //gas_t gas;
+  uint16_t ec02_ppm; ///< The equivalent CO2 (eCO2) value in parts per million (ppm).
+  uint16_t tvoc_ppb; ///< The Total Volatile Organic Compound (TVOC) value in parts per billion (ppb).
 
 } context_all_t;
 

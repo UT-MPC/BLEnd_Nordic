@@ -169,15 +169,31 @@ context_all_t* context_read_all(){
   void ** cur_sensor_ptr = malloc(sizeof(void*));
   
   m_sound_read(cur_sensor_ptr);
-  context_all->sound = *((sound_t*)*cur_sensor_ptr);
+  sound_t sound = *((sound_t*)*cur_sensor_ptr);
+  context_all->avg_peak = sound.avg_peak;
+  context_all->max_peak = sound.max_peak;
+  context_all->count_over_thres_per_frame = sound.count_over_thres_per_frame;
+  context_all->avg_all = sound.avg_all;
+  context_all->avg_over_thres = sound.avg_over_thres;
+
   m_temperature_read(cur_sensor_ptr);
-  context_all->temperature = *((temperature_t*)*cur_sensor_ptr);
+  temperature_t temp = *((temperature_t*)*cur_sensor_ptr);
+  context_all->temp_integer = temp.integer;
+  context_all->temp_decimal = temp.decimal;
+
   m_humidity_read(cur_sensor_ptr);
-  context_all->humidity = *((humidity_t*)*cur_sensor_ptr);
+  humidity_t humidity = *((humidity_t*)*cur_sensor_ptr);
+  context_all->humid = humidity.humid;
+
   m_pressure_read(cur_sensor_ptr);
-  context_all->pressure = *((pressure_t*)*cur_sensor_ptr);
+  pressure_t pressure = *((pressure_t*)*cur_sensor_ptr);
+  context_all->pressure_integer = pressure.integer;
+  context_all->pressure_decimal = pressure.decimal;
+
   m_gas_read(cur_sensor_ptr);
-  context_all->gas = *((gas_t*)*cur_sensor_ptr);
+  gas_t gas = *((gas_t*)*cur_sensor_ptr);
+  context_all->ec02_ppm = gas.ec02_ppm;
+  context_all->tvoc_ppb = gas.tvoc_ppb;
 
   free(cur_sensor_ptr);
 

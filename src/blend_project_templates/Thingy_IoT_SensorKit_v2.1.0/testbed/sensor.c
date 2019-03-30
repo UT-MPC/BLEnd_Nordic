@@ -197,6 +197,10 @@ void drv_gas_evt_handler(drv_gas_sensor_data_t const * p_data)
   {
     _gas_cache.ec02_ppm = p_data->ec02_ppm;
     _gas_cache.tvoc_ppb = p_data->tvoc_ppb;
+
+    NRF_LOG_DEBUG("drv_gas_evt_handler ec02_ppm = %d \r\n: ", _gas_cache.ec02_ppm);
+    NRF_LOG_DEBUG("drv_gas_evt_handler tvoc_ppb = %d \r\n: ", _gas_cache.tvoc_ppb);
+
     _gas_cache.timestamp_ms = APP_TIMER_MS(app_timer_cnt_get());
   }
 }
