@@ -251,7 +251,7 @@ uint32_t drv_mic_data_handler(m_audio_frame_t * p_frame)
     NRF_LOG_DEBUG("drv_mic_data_handler avg_over_thres = %d \r\n: ", _sound_cache.avg_over_thres);
     NRF_LOG_DEBUG("drv_mic_data_handler avg_peak = " NRF_LOG_FLOAT_MARKER "\r\n: ", NRF_LOG_FLOAT(_sound_cache.avg_peak));
 
-    NRF_LOG_DEBUG("drv_mic_data_handler (%d ms): number of frames  = %d \r\n: ", _sound_cache.timestamp_ms, _acc_sound.acc_num_frames);
+    /* NRF_LOG_DEBUG("drv_mic_data_handler (%d ms): number of frames  = %d \r\n: ", _sound_cache.timestamp_ms, _acc_sound.acc_num_frames); */
     //_acc_sound.acc_noise_level = 0;
     //_acc_sound.acc_num_samples = 0;
     _acc_sound.acc_num_frames = 0;
@@ -262,6 +262,7 @@ uint32_t drv_mic_data_handler(m_audio_frame_t * p_frame)
     _acc_sound.acc_avg_all = 0;
     _acc_sound.acc_avg_over_thres = 0;
 
+    m_sound_disable();    
   }
   return NRF_SUCCESS;
 }

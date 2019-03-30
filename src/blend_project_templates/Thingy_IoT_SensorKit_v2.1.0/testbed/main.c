@@ -89,13 +89,16 @@
 #define BATTERY_PROFILING 0 /*!< 1-true, 0-false */
 
 /* === Section (Sampling schedule parameters) === */
+/* Start => Early stop => Gas stop => Next Start */
 #define SAMPLE_TIMER_WARMUP_MS 50
-#define SAMPLE_INTERVAL_MS 300000
-#define SAMPLE_TIMER_SAMPLE_ON_MS 30000
-#define SAMPLE_TIMER_SAMPLE_OFF_MS SAMPLE_INTERVAL_MS - SAMPLE_TIMER_SAMPLE_ON_MS
+#define SAMPLE_INTERVAL_MS 80000
+#define SAMPLE_TIMER_SAMPLE_EARLY_STOP_MS 5000
+#define SAMPLE_TIMER_SAMPLE_GAS_MS 30000
+#define MICROPHONE_TIMER_INTERVAL_MS 20000 // 10s auto-stoped sampling period followed 10s rest
 /* === End of Section (Sampling schedule parameters) === */
 
 APP_TIMER_DEF (sampling_timer);
+APP_TIMER_DEF (mic_timer);
 
 /* === Section (BLEnd parameters) === */
 const uint16_t lambda_ms = 4000;
@@ -113,7 +116,9 @@ blend_data_t m_blend_data; /*!< Complete user payload. */
 uint8_t on_scan_flag  = 0;
 bool discover_mode = true;
 bool sample_initiated = false;
+bool gas_unfinished = false;
 uint8_t batt_lvl_read = 0; /*!< Most recent read of battery level. */
+bool mic_on = false;
 
 
 /* === Section (Function Prototypes) === */
@@ -123,11 +128,13 @@ uint32_t initiate_sampling(void);
 void stop_sampling_update_payload(void);
 void app_init(void);
 void app_start(void);
+void update_payload(void); /*!< Grab the context values and update the adv. content */
 
 /*!< Callback functions */
 static void m_blend_handler(blend_evt_t * p_blend_evt);
 static void m_batt_meas_handler(m_batt_meas_event_t const * p_batt_meas_event);
 void sampling_timer_handler(void);
+void mic_timer_handler(void);
 
 /* === End of Section (Function Prototypes) === */
 
@@ -267,13 +274,11 @@ static void timer_init(void) {
 /**@brief Initiate all sensor sampling.
  */
 uint32_t initiate_sampling(void) {
-  NRF_LOG_DEBUG("initiate_sampling: start sampling at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
-
+  //NRF_LOG_DEBUG("initiate_sampling: start sampling at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
   for (int i = 0; i < sizeof(enabled_sensors)/sizeof(ctx_type_def); ++i) {
     context_start(enabled_sensors[i]);
   }
   sample_initiated = true;
-
   return 0;
 }
 
@@ -281,31 +286,20 @@ uint32_t initiate_sampling(void) {
  * @details Stop all sensors at the end.
  */
 void stop_sampling_update_payload(void) {
-  NRF_LOG_DEBUG("stop_sampling_update_payload: turn off sampling at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
-
-  for (int i = 0; i < sizeof(enabled_sensors)/sizeof(ctx_type_def); ++i) {
-    context_stop(enabled_sensors[i]);
+  //NRF_LOG_DEBUG("stop_sampling_update_payload: turn off sampling at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
+  if (gas_unfinished) {
+    context_stop(VOC_CTX);
+    gas_unfinished = false;
+  } else {
+    for (int i = 0; i < sizeof(enabled_sensors)/sizeof(ctx_type_def); ++i) {
+      if (enabled_sensors[i] != VOC_CTX) {
+	context_stop(enabled_sensors[i]);
+      }
+    }
+    gas_unfinished = true;
   }
 
-  //TODO: update payload
-  context_all_t* context_all = context_read_all();
-  int16_t max_peak = context_all->sound.max_peak;
-  uint8_t payload[CONTEXT_ALL_SIZE + 1];
-  //payload[0] = 0; //TODO: make this the prefix
-  context_all_to_bytes((uint8_t*)(payload), context_all);
-  payload[sizeof(payload) - 1] = batt_lvl_read;
-  free(context_all);
-
-  // Just a test below
-  // sound_t sound = *(sound_t *)(payload + 1);
-  // max_peak = sound.max_peak;
-  // NRF_LOG_DEBUG("stop_sampling_update_payload (payload) max_peak = %d \r\n: ", max_peak);
-  
-  m_blend_data.data_length = sizeof(payload);
-  m_blend_data.data = payload;
-  if (blend_advdata_set(&m_blend_data) != BLEND_NO_ERROR) {
-    NRF_LOG_ERROR("Blend data set error");
-  }
+  update_payload();
 }
 
 /**@brief Initialize the node's sensing equipments, app timer.
@@ -313,7 +307,9 @@ void stop_sampling_update_payload(void) {
 void app_init(void) {
   uint32_t err_code = app_timer_create(&sampling_timer, APP_TIMER_MODE_SINGLE_SHOT, sampling_timer_handler);
   APP_ERROR_CHECK(err_code);
-
+  err_code = app_timer_create(&mic_timer, APP_TIMER_MODE_REPEATED, mic_timer_handler);
+  APP_ERROR_CHECK(err_code);
+  
   sample_initiated = false;
 }
 
@@ -323,7 +319,25 @@ void app_start(void) {
   blend_sched_start();
   uint32_t err_code = app_timer_start(sampling_timer, APP_TIMER_TICKS(SAMPLE_TIMER_WARMUP_MS), NULL);
   APP_ERROR_CHECK(err_code);
+  err_code = app_timer_start(mic_timer, APP_TIMER_TICKS(MICROPHONE_TIMER_INTERVAL_MS), NULL);
+  APP_ERROR_CHECK(err_code);
 }
+
+void update_payload() {
+  context_all_t* context_all = context_read_all();
+  int16_t max_peak = context_all->sound.max_peak;
+  uint8_t payload[CONTEXT_ALL_SIZE + 1];
+  context_all_to_bytes((uint8_t*)(payload), context_all);
+  payload[sizeof(payload) - 1] = batt_lvl_read;
+  free(context_all);
+  
+  m_blend_data.data_length = sizeof(payload);
+  m_blend_data.data = payload;
+  if (blend_advdata_set(&m_blend_data) != BLEND_NO_ERROR) {
+    NRF_LOG_ERROR("Blend data set error");
+  }
+}
+
 
 /**@brief Blend soft interrupt handlers (No use in testbed for now).
 */
@@ -376,17 +390,31 @@ void sampling_timer_handler(void) {
   uint64_t next_timer_ms = 999;
   if (sample_initiated) {
     stop_sampling_update_payload();
-    sample_initiated = false;
-    next_timer_ms = SAMPLE_TIMER_SAMPLE_OFF_MS;
+    if (gas_unfinished) {
+      next_timer_ms = SAMPLE_TIMER_SAMPLE_GAS_MS - SAMPLE_TIMER_SAMPLE_EARLY_STOP_MS;
+      NRF_LOG_DEBUG("sampling_timer_handler: Turning off all sensors except gas and mic at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
+    } else {
+      sample_initiated = false;
+      next_timer_ms = SAMPLE_INTERVAL_MS - SAMPLE_TIMER_SAMPLE_GAS_MS;
+      NRF_LOG_DEBUG("sampling_timer_handler: Turning off gas sensor at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
+    }
   } else {
     initiate_sampling();
     sample_initiated = true;
-    next_timer_ms = SAMPLE_TIMER_SAMPLE_ON_MS;
+    next_timer_ms = SAMPLE_TIMER_SAMPLE_EARLY_STOP_MS;
+    NRF_LOG_DEBUG("sampling_timer_handler: Start all sampling at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
   }
   ret = app_timer_start(sampling_timer, APP_TIMER_TICKS(next_timer_ms), NULL);
   APP_ERROR_CHECK(ret);
 }
 
+void mic_timer_handler(void) {
+  // Update the payload
+  update_payload();
+  // Restart mic. sampling
+  context_start(NOISE_CTX);
+  NRF_LOG_DEBUG("sampling_timer_handler: Turning on mic at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
+}
 /* === Section (Function Prototypes Implementation) === */
 
 

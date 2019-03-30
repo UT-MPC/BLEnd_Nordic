@@ -38,7 +38,7 @@ int16_t getPositive(int16_t val) {
 }
 
 void drv_audio_coder_init(void) {
-  NRF_LOG_DEBUG("Audio Codec selected: SOUND LEVEL");
+  //NRF_LOG_DEBUG("Audio Codec selected: SOUND LEVEL");
 }
 
 void drv_audio_coder_encode(int16_t *raw_samples, m_audio_frame_t *p_frame) {
