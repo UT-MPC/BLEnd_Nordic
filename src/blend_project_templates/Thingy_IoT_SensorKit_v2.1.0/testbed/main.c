@@ -410,10 +410,12 @@ static void toggle_charging_mode() {
     blend_sched_stop();
   }else{
     charging_mode = false;
-    blend_sched_start();
+    // blend_sched_start();
+		sd_nvic_SystemReset();
   }
   ret_code_t err_code = led_set(&led_configs[led_mode],NULL);
   APP_ERROR_CHECK(err_code);
+
 }
 
 /**@brief Blend soft interrupt handlers (No use in testbed for now).
