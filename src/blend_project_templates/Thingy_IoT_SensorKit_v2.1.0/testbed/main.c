@@ -224,6 +224,7 @@ static void power_manage(void) {
   APP_ERROR_CHECK(err_code);
 }
 
+
 static ret_code_t button_init(void) {
   ret_code_t err_code;
 
