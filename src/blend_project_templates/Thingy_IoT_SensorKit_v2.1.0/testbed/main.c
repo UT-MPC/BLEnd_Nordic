@@ -70,6 +70,7 @@
 #include "nordic_common.h"
 #include "nrf.h"
 #include "nrf_delay.h"
+#include "nrf_drv_gpiote.h"
 #include "nrf_drv_rng.h"
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
@@ -78,9 +79,6 @@
 #include "softdevice_handler.h"
 #include "support_func.h"
 #include "twi_manager.h"
-
-#include "app_button.h"
-#include "nrf_drv_gpiote.h"
 
 
 #define DEAD_BEEF 0xDEADBEEF /*<! //! Value used as error code on stack dump.*/
@@ -101,6 +99,37 @@
 #define MICROPHONE_TIMER_INTERVAL_MS 20000 // 10s auto-stoped sampling period followed 10s rest
 /* === End of Section (Sampling schedule parameters) === */
 
+/* === Section (LED Configs) === */
+#define LED_CONFIG_WHITE			\
+  {						\
+    .mode = BLE_UIS_LED_MODE_BREATHE,		\
+    .data =					\
+    {						\
+      .mode_const =				\
+      {						\
+	.r  = 255,				\
+	.g  = 255,				\
+	.b  = 255,				\
+      }						\
+    }						\
+  }
+#define LED_CONFIG_OFF				\
+{						\
+  .mode = BLE_UIS_LED_MODE_OFF,			\
+  .data =					\
+  {						\
+    .mode_const =				\
+    {						\
+      .r  = 255,				\
+      .g  = 255,				\
+      .b  = 255,				\
+    }						\
+  }						\
+}
+#define LED_MODE_CHARGING 0
+#define LED_MODE_NORMAL 1
+/* === End of Section (LED Configs) === */
+
 APP_TIMER_DEF (sampling_timer);
 APP_TIMER_DEF (mic_timer);
 
@@ -114,6 +143,7 @@ const uint16_t adv_interval_ms = 127;
 uint8_t payload[DATA_LENGTH];
 static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
 static const nrf_drv_twi_t m_twi_sensors = NRF_DRV_TWI_INSTANCE(TWI_SENSOR_INSTANCE);
+static const ble_uis_led_t led_configs[2] = {LED_CONFIG_WHITE, LED_CONFIG_OFF}; // See marco above
 const ctx_type_def enabled_sensors[5] = {TEMP_CTX, HUMID_CTX, PRESS_CTX, VOC_CTX, NOISE_CTX};
 
 blend_data_t m_blend_data; /*!< Complete user payload. */
@@ -123,20 +153,10 @@ bool sample_initiated = false;
 bool gas_unfinished = false;
 uint8_t batt_lvl_read = 0; /*!< Most recent read of battery level. */
 bool mic_on = false;
+/*!< Button related variables */
+static bool charging_mode = false;
+int btn_hit_cnt = 0;
 
-#define LED_CONFIG_WHITE				\
-{						\
-  .mode = BLE_UIS_LED_MODE_BREATHE,		\
-    .data =					\
-    {						\
-      .mode_const =				\
-      {					\
-  .r  = 255,				\
-  .g  = 255,				\
-  .b  = 255,				\
-      }					\
-    }						\
-}
 /* === Section (Function Prototypes) === */
 
 /*!< Sensing related functions */
@@ -145,10 +165,12 @@ void stop_sampling_update_payload(void);
 void app_init(void);
 void app_start(void);
 void update_payload(void); /*!< Grab the context values and update the adv. content */
+static void toggle_charging_mode();
 
 /*!< Callback functions */
 static void m_blend_handler(blend_evt_t * p_blend_evt);
 static void m_batt_meas_handler(m_batt_meas_event_t const * p_batt_meas_event);
+static void button_evt_handler(uint8_t pin_no, uint8_t button_action);
 void sampling_timer_handler(void);
 void mic_timer_handler(void);
 
@@ -202,44 +224,16 @@ static void power_manage(void) {
   APP_ERROR_CHECK(err_code);
 }
 
-static int silence_mode = 0;
-static void toggle_silence_mode(){
-  if (silence_mode == 0){
-    silence_mode = 1;
-    blend_sched_stop();
-  }else{
-    silence_mode = 0;
-    blend_sched_start();
-  }
-}
-static int btn_cnt = 0;
-static void button_evt_handler(uint8_t pin_no, uint8_t button_action)
-{
-  uint32_t err_code;
-  if (pin_no == BUTTON)
-  {
-    NRF_LOG_DEBUG("Button pressed %d \r\n", button_action);
-    if (button_action == 0){
-      btn_cnt += 1;
-      if (btn_cnt == 3){
-        toggle_silence_mode();
-        btn_cnt = 0;
-      }
-    }
-  }
-}
-static ret_code_t button_init(void)
-{
+
+static ret_code_t button_init(void) {
   ret_code_t err_code;
 
   /* Configure gpiote for the sensors data ready interrupt. */
-  if (!nrf_drv_gpiote_is_init())
-  {
+  if (!nrf_drv_gpiote_is_init()) {
     err_code = nrf_drv_gpiote_init();
     APP_ERROR_CHECK(err_code);
   }
-  static const app_button_cfg_t button_cfg =
-  {
+  static const app_button_cfg_t button_cfg = {
     .pin_no         = BUTTON,
     .active_state   = APP_BUTTON_ACTIVE_LOW,
     .pull_cfg       = NRF_GPIO_PIN_PULLUP,
@@ -408,6 +402,13 @@ void update_payload() {
   }
 }
 
+static void toggle_charging_mode() {
+  if (!charging_mode){
+    charging_mode = true;
+  }else{
+    charging_mode = false;
+  }
+}
 
 /**@brief Blend soft interrupt handlers (No use in testbed for now).
 */
@@ -484,6 +485,22 @@ void mic_timer_handler(void) {
   // Restart mic. sampling
   context_start(NOISE_CTX);
   //NRF_LOG_DEBUG("sampling_timer_handler: Turning on mic at %d ms.\r\n", _BLEND_APP_TIMER_MS(app_timer_cnt_get()));
+}
+
+static void button_evt_handler(uint8_t pin_no, uint8_t button_action) {
+  uint32_t err_code;
+  if (pin_no == BUTTON)
+  {
+    NRF_LOG_DEBUG("Button pressed %d \r\n", button_action);
+    if (button_action == 0){
+      btn_hit_cnt += 1;
+      if (btn_hit_cnt == 3){
+        NRF_LOG_DEBUG("Stop BLEnd!!!!!!\r\n");
+        toggle_charging_mode();
+        btn_hit_cnt = 0;
+      }
+    }
+  }
 }
 /* === Section (Function Prototypes Implementation) === */
 
