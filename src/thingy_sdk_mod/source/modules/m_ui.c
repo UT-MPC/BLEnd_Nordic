@@ -464,8 +464,8 @@ uint32_t m_ui_init(m_ble_service_handle_t * p_handle, m_ui_init_t * p_params)
     p_handle->ble_evt_cb = thingy_ui_on_ble_evt;
     p_handle->init_cb    = thingy_ui_service_init;
 
-    err_code = button_init();
-    APP_ERROR_CHECK(err_code);
+    // err_code = button_init();
+    // APP_ERROR_CHECK(err_code);
 
     led_init.p_light_conf        = led_conf;
     led_init.num_lights          = DRV_EXT_LIGHT_NUM;

@@ -79,6 +79,10 @@
 #include "support_func.h"
 #include "twi_manager.h"
 
+#include "app_button.h"
+#include "nrf_drv_gpiote.h"
+
+
 #define DEAD_BEEF 0xDEADBEEF /*<! //! Value used as error code on stack dump.*/
 //! Maximum size of scheduler events.
 #define SCHED_MAX_EVENT_DATA_SIZE MAX(APP_TIMER_SCHED_EVENT_DATA_SIZE, BLE_STACK_HANDLER_SCHED_EVT_SIZE)
@@ -120,7 +124,19 @@ bool gas_unfinished = false;
 uint8_t batt_lvl_read = 0; /*!< Most recent read of battery level. */
 bool mic_on = false;
 
-
+#define LED_CONFIG_WHITE				\
+{						\
+  .mode = BLE_UIS_LED_MODE_BREATHE,		\
+    .data =					\
+    {						\
+      .mode_const =				\
+      {					\
+  .r  = 255,				\
+  .g  = 255,				\
+  .b  = 255,				\
+      }					\
+    }						\
+}
 /* === Section (Function Prototypes) === */
 
 /*!< Sensing related functions */
@@ -186,6 +202,57 @@ static void power_manage(void) {
   APP_ERROR_CHECK(err_code);
 }
 
+static int silence_mode = 0;
+static void toggle_silence_mode(){
+  if (silence_mode == 0){
+    silence_mode = 1;
+    blend_sched_stop();
+  }else{
+    silence_mode = 0;
+    blend_sched_start();
+  }
+}
+static int btn_cnt = 0;
+static void button_evt_handler(uint8_t pin_no, uint8_t button_action)
+{
+  uint32_t err_code;
+  if (pin_no == BUTTON)
+  {
+    NRF_LOG_DEBUG("Button pressed %d \r\n", button_action);
+    if (button_action == 0){
+      btn_cnt += 1;
+      if (btn_cnt == 3){
+        NRF_LOG_DEBUG("Stop BLEnd!!!!!!\r\n");
+        toggle_silence_mode();
+        btn_cnt = 0;
+      }
+    }
+  }
+}
+static ret_code_t button_init(void)
+{
+  ret_code_t err_code;
+
+  /* Configure gpiote for the sensors data ready interrupt. */
+  if (!nrf_drv_gpiote_is_init())
+  {
+    err_code = nrf_drv_gpiote_init();
+    APP_ERROR_CHECK(err_code);
+  }
+  static const app_button_cfg_t button_cfg =
+  {
+    .pin_no         = BUTTON,
+    .active_state   = APP_BUTTON_ACTIVE_LOW,
+    .pull_cfg       = NRF_GPIO_PIN_PULLUP,
+    .button_handler = button_evt_handler
+  };  
+
+  err_code = app_button_init(&button_cfg, 1, APP_TIMER_TICKS(50));
+  APP_ERROR_CHECK(err_code);
+
+  return app_button_enable();
+}
+
 static void thingy_init(void) {
   uint32_t                 err_code;
   m_ui_init_t              ui_params;
@@ -200,6 +267,11 @@ static void thingy_init(void) {
   ui_params.p_twi_instance = &m_twi_sensors;
   err_code = m_ui_init(&m_ble_service_handles[THINGY_SERVICE_UI],
 		       &ui_params);
+  APP_ERROR_CHECK(err_code);
+    
+  app_button_disable();
+
+  err_code = button_init();
   APP_ERROR_CHECK(err_code);
 }
 
@@ -293,7 +365,7 @@ void stop_sampling_update_payload(void) {
   } else {
     for (int i = 0; i < sizeof(enabled_sensors)/sizeof(ctx_type_def); ++i) {
       if (enabled_sensors[i] != VOC_CTX && enabled_sensors[i] != NOISE_CTX) {
-	context_stop(enabled_sensors[i]);
+	      context_stop(enabled_sensors[i]);
       }
     }
     gas_unfinished = true;
