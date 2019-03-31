@@ -222,7 +222,6 @@ static void button_evt_handler(uint8_t pin_no, uint8_t button_action)
     if (button_action == 0){
       btn_cnt += 1;
       if (btn_cnt == 3){
-        NRF_LOG_DEBUG("Stop BLEnd!!!!!!\r\n");
         toggle_silence_mode();
         btn_cnt = 0;
       }
