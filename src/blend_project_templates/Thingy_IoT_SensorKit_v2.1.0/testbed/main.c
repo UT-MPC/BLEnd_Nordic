@@ -407,8 +407,10 @@ static void toggle_charging_mode() {
   if (!charging_mode){
     charging_mode = true;
     led_mode = LED_MODE_CHARGING;
+    blend_sched_stop();
   }else{
     charging_mode = false;
+    blend_sched_start();
   }
   ret_code_t err_code = led_set(&led_configs[led_mode],NULL);
   APP_ERROR_CHECK(err_code);
@@ -495,11 +497,10 @@ static void button_evt_handler(uint8_t pin_no, uint8_t button_action) {
   uint32_t err_code;
   if (pin_no == BUTTON)
   {
-    NRF_LOG_DEBUG("Button pressed %d \r\n", button_action);
     if (button_action == 0){
       btn_hit_cnt += 1;
       if (btn_hit_cnt == 3){
-        NRF_LOG_DEBUG("Pressed 3 times. Stop beaconing\n");
+        NRF_LOG_DEBUG("Pressed 3 times. Switch modes.\n");
         toggle_charging_mode();
         btn_hit_cnt = 0;
       }
