@@ -112,11 +112,11 @@ static uint8_t _blend_on_beacon_flag = 0;
 static uint8_t _blend_sent_beacon_count = 0;
 static ble_gap_adv_params_t _blend_adv_params;
 static uint8_t _epoch_flag = 0;
-
+static uint8_t _blend_stop_flag = 1;
 uint8_t _blend_beacon_content[31];
 
 APP_TIMER_DEF (scan_timer);
-APP_TIMER_DEF (half_epoch_timer);
+APP_TIMER_DEF (epoch_timer);
 APP_TIMER_DEF (beacon_count_timer);
 APP_TIMER_DEF (one_beacon_timer);
 APP_TIMER_DEF (beacon_slack_timer);
@@ -461,6 +461,7 @@ void scan_prepare(void) {
   ret_code_t ret;
   beacon_count_set(-1);
   beacon_slack_timer_handler();
+
   ret = app_timer_start(one_beacon_timer,APP_TIMER_TICKS(ONE_BEACON_MS), NULL);
   APP_ERROR_CHECK(ret);
 }
@@ -491,10 +492,20 @@ void scan_timer_handler(void* p_context) {
   new_blend_evt.evt_data.data_length = 0;
   (*_blend_evt_handler) ( &new_blend_evt);
 }
-
-void half_epoch_timer_handler (void* p_context) {
+void stop_all_timer(){
+  app_timer_stop(scan_timer);
+  app_timer_stop(epoch_timer);
+  app_timer_stop(beacon_count_timer);
+  app_timer_stop(one_beacon_timer);
+  app_timer_stop(beacon_slack_timer);
+}
+void epoch_timer_handler (void* p_context) {
   ret_code_t err_code;
   advertising_stop();
+  if (_blend_stop_flag == 1){
+    stop_all_timer();
+    return;
+  }
   memset(_shadow_beacons, 0, (ROUNDED_DIV(_epoch_length_ms , _adv_interval_ms) + 2) * sizeof(_shadow_beacons[0]));
   //Call blend handler
   blend_evt_t new_blend_evt;
@@ -531,24 +542,30 @@ void beacon_count_timer_handler (void * p_context) {
 }
 
 void blend_sched_start() {
+  if (_blend_stop_flag == 0){
+    return;
+  }
+  _blend_stop_flag = 0;
   if (_blend_mode == BLEND_MODE_SINK){
     _blend_scan_sd_start();
     return;
   }
   ret_code_t err_code;
   _epoch_flag = 1;
-  err_code=app_timer_start(half_epoch_timer,APP_TIMER_TICKS(_epoch_length_ms), NULL);
+  err_code=app_timer_start(epoch_timer,APP_TIMER_TICKS(_epoch_length_ms), NULL);
   APP_ERROR_CHECK(err_code);
   scan_prepare();
 }
-
+void blend_sched_stop() {
+  _blend_stop_flag = 1;
+}
 void blend_timer_set(void) {
   // The timer for scanning duration.
   ret_code_t err_code = app_timer_create(&scan_timer, SCAN_TIMER_MODE, scan_timer_handler);
   APP_ERROR_CHECK(err_code);
 	
   // The timer for half epoch duration in order to use BiBlend.
-  err_code = app_timer_create(&half_epoch_timer, EPOCH_TIMER_MODE, half_epoch_timer_handler);
+  err_code = app_timer_create(&epoch_timer, EPOCH_TIMER_MODE, epoch_timer_handler);
   APP_ERROR_CHECK(err_code);
 	
   // The timer for one beacon. This timer times out after every beacon sent in order to change the content of the beacons.

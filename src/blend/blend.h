@@ -89,6 +89,7 @@ typedef void (*blend_evt_handler_t)(blend_evt_t * m_blend_evt);
   Function to start the BLEnd neighbor discovery process.
  */
 void blend_sched_start(void);
+void blend_sched_stop(void);
 
 //! Initialize BLEnd module.
 /*!
