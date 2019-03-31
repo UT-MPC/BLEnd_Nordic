@@ -126,8 +126,8 @@
     }						\
   }						\
 }
-#define LED_MODE_CHARGING 0
-#define LED_MODE_NORMAL 1
+#define LED_MODE_NORMAL 0
+#define LED_MODE_CHARGING 1
 /* === End of Section (LED Configs) === */
 
 APP_TIMER_DEF (sampling_timer);
@@ -143,7 +143,7 @@ const uint16_t adv_interval_ms = 127;
 uint8_t payload[DATA_LENGTH];
 static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
 static const nrf_drv_twi_t m_twi_sensors = NRF_DRV_TWI_INSTANCE(TWI_SENSOR_INSTANCE);
-static const ble_uis_led_t led_configs[2] = {LED_CONFIG_WHITE, LED_CONFIG_OFF}; // See marco above
+static const ble_uis_led_t led_configs[2] = {LED_CONFIG_OFF, LED_CONFIG_WHITE}; // See marco above
 const ctx_type_def enabled_sensors[5] = {TEMP_CTX, HUMID_CTX, PRESS_CTX, VOC_CTX, NOISE_CTX};
 
 blend_data_t m_blend_data; /*!< Complete user payload. */
@@ -402,11 +402,15 @@ void update_payload() {
 }
 
 static void toggle_charging_mode() {
+  int led_mode = LED_MODE_NORMAL;
   if (!charging_mode){
     charging_mode = true;
+    led_mode = LED_MODE_CHARGING;
   }else{
     charging_mode = false;
   }
+  ret_code_t err_code = led_set(&led_configs[led_mode],NULL);
+  APP_ERROR_CHECK(err_code);
 }
 
 /**@brief Blend soft interrupt handlers (No use in testbed for now).
@@ -494,7 +498,7 @@ static void button_evt_handler(uint8_t pin_no, uint8_t button_action) {
     if (button_action == 0){
       btn_hit_cnt += 1;
       if (btn_hit_cnt == 3){
-        NRF_LOG_DEBUG("Stop BLEnd!!!!!!\r\n");
+        NRF_LOG_DEBUG("Pressed 3 times. Stop beaconing\n");
         toggle_charging_mode();
         btn_hit_cnt = 0;
       }
