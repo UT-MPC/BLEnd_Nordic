@@ -100,7 +100,7 @@
 /* === End of Section (Sampling schedule parameters) === */
 
 /* === Section (LED Configs) === */
-#define LED_CONFIG_WHITE			\
+#define LED_CONFIG_CHARGING			\
   {						\
     .mode = BLE_UIS_LED_MODE_BREATHE,		\
     .data =					\
@@ -113,21 +113,6 @@
       }						\
     }						\
   }
-#define LED_CONFIG_OFF				\
-{						\
-  .mode = BLE_UIS_LED_MODE_OFF,			\
-  .data =					\
-  {						\
-    .mode_const =				\
-    {						\
-      .r  = 255,				\
-      .g  = 255,				\
-      .b  = 255,				\
-    }						\
-  }						\
-}
-#define LED_MODE_NORMAL 0
-#define LED_MODE_CHARGING 1
 /* === End of Section (LED Configs) === */
 
 APP_TIMER_DEF (sampling_timer);
@@ -143,7 +128,7 @@ const uint16_t adv_interval_ms = 127;
 uint8_t payload[DATA_LENGTH];
 static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
 static const nrf_drv_twi_t m_twi_sensors = NRF_DRV_TWI_INSTANCE(TWI_SENSOR_INSTANCE);
-static const ble_uis_led_t led_configs[2] = {LED_CONFIG_OFF, LED_CONFIG_WHITE}; // See marco above
+static const ble_uis_led_t m_led_config_charging = LED_CONFIG_CHARGING;
 const ctx_type_def enabled_sensors[5] = {TEMP_CTX, HUMID_CTX, PRESS_CTX, VOC_CTX, NOISE_CTX};
 
 blend_data_t m_blend_data; /*!< Complete user payload. */
@@ -403,19 +388,14 @@ void update_payload() {
 }
 
 static void toggle_charging_mode() {
-  int led_mode = LED_MODE_NORMAL;
-  if (!charging_mode){
-    charging_mode = true;
-    led_mode = LED_MODE_CHARGING;
-    blend_sched_stop();
-  }else{
+  if (charging_mode) {
     charging_mode = false;
-    // blend_sched_start();
-		sd_nvic_SystemReset();
+    sd_nvic_SystemReset();
   }
-  ret_code_t err_code = led_set(&led_configs[led_mode],NULL);
+  charging_mode = true;
+  blend_sched_stop();
+  ret_code_t err_code = led_set(&m_led_config_charging, NULL);
   APP_ERROR_CHECK(err_code);
-
 }
 
 /**@brief Blend soft interrupt handlers (No use in testbed for now).
