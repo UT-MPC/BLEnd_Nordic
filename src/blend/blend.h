@@ -48,7 +48,8 @@ enum blend_mode_t{
   BLEND_MODE_FULL,
   BLEND_MODE_UNI,
   BLEND_MODE_BI,
-  BLEND_MODE_SINK // for debug purpose.
+  BLEND_MODE_SINK,    // only scan
+  BLEND_MODE_BEACON,  // only beacon
 };
 
 /**

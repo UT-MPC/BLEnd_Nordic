@@ -550,6 +550,10 @@ void blend_sched_start() {
     _blend_scan_sd_start();
     return;
   }
+  if (_blend_mode == BLEND_MODE_BEACON){
+    _blend_beacon_sd_start();
+    return;
+  }
   ret_code_t err_code;
   _epoch_flag = 1;
   err_code=app_timer_start(epoch_timer,APP_TIMER_TICKS(_epoch_length_ms), NULL);
@@ -558,6 +562,14 @@ void blend_sched_start() {
 }
 void blend_sched_stop() {
   _blend_stop_flag = 1;
+  if (_blend_mode == BLEND_MODE_SINK){
+    scan_stop();
+    return;
+  }
+  if (_blend_mode == BLEND_MODE_BEACON){
+    _blend_beacon_sd_stop();
+    return;
+  }
 }
 void blend_timer_set(void) {
   // The timer for scanning duration.
@@ -584,6 +596,10 @@ void blend_timer_set(void) {
 void blend_param_set(blend_param_t input) {
   _blend_mode = input.blend_mode;
   if (_blend_mode == BLEND_MODE_SINK) {
+    return;
+  }
+  if (_blend_mode == BLEND_MODE_BEACON) {
+    _adv_interval_ms = input.adv_interval_ms;
     return;
   }
   _epoch_length_ms = input.epoch_length_ms;
