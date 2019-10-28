@@ -3,6 +3,10 @@
 
 Identifying “who is around” is key in a plethora of smart scenarios. This project provides you an implementation of the BLEnd scheduler to enable your IoT devices to be aware of its surroundings using a low duty cycle _continuous_ neighbor discovery protocol [BLEnd:practical continuous neighbor discovery for Bluetooth low energy](https://dl.acm.org/citation.cfm?id=3055086).
 
+As a communication middleware, this implementation of the blend protocol provides an energy-efficient approach to let your device automatically discovers its peer devices, using **ad hoc** wireless connections, without infrastructure support(e.g. Access Point).
+
+Applications can also piggyback information in the discovery beacons. For instance, the [Stacon system](https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=8730667&tag=1) leverages this symmetric and asynchronous peer discovery to enable the ad hoc grouping of sensing devices and collaboration.
+
 ## Getting Started
 
 ### Prerequisites
