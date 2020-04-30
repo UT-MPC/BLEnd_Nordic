@@ -99,10 +99,14 @@ static ble_gap_scan_params_t const m_scan_params =
   .use_whitelist = 0,
 #endif
 };
-#define FILTER_PREFIX_LEN 1
+#define FILTER_PREFIX_LEN 6
 uint8_t filter_prefix[FILTER_PREFIX_LEN] = {
-    0xff
+    0xFF, 0x4C, 0x00, 0x02, 0x15, 0xF7
 };
+uint32_t start_tick = 0;
+APP_TIMER_DEF (m_repeated_timer_id);
+
+#define REPEATED_TIMER_INTERVAL     300000
 
 //! Value used as error code on stack dump, can be used to identify stack location on stack unwind.
 #define DEAD_BEEF 0xDEADBEEF
@@ -185,6 +189,13 @@ void app_error_fault_handler(uint32_t id, uint32_t pc, uint32_t info)
     #endif
 
     app_error_save_and_stop(id, pc, info);
+}
+
+uint32_t get_rtc_counter(void)
+{
+  uint32_t time = app_timer_cnt_diff_compute(app_timer_cnt_get(), start_tick);
+  return APP_TIMER_MS(time) & 0xffff;
+  // return app_timer_cnt_get();
 }
 
 /**@brief Function for assert macro callback.
@@ -274,12 +285,41 @@ static void board_init(void)
 
     nrf_delay_ms(100);
 }
+
+/**@brief Timeout handler for the repeated timer.
+ */
+static void repeated_timer_handler(void * p_context)
+{
+    
+}
+
 static void timer_init(void)
 {
     ret_code_t err_code = app_timer_init();
     APP_ERROR_CHECK(err_code);
 }
 
+/**@brief Create timers.
+ */
+static void create_timers()
+{
+    ret_code_t err_code;
+
+    // Create timers
+    err_code = app_timer_create(&m_repeated_timer_id,
+                                APP_TIMER_MODE_REPEATED,
+                                repeated_timer_handler);
+    APP_ERROR_CHECK(err_code);
+}
+
+static bool verify_beacon_prefix(uint8_t* p_data) {
+  for (int i = 0; i < FILTER_PREFIX_LEN; i ++) {
+    if (p_data[i] != filter_prefix[i]) {
+      return false;
+    }
+  }
+  return true;
+}
 
 void parse_beacon(ble_gap_evt_adv_report_t const * p_adv_report) {
 
@@ -290,11 +330,13 @@ void parse_beacon(ble_gap_evt_adv_report_t const * p_adv_report) {
   while (index < p_adv_report->dlen) {
     uint8_t field_length = p_data[index];
     uint8_t field_type = p_data[index + 1];
-    NRF_LOG_HEXDUMP_INFO(p_data + index, field_length + 1);
-    
+    if (verify_beacon_prefix(p_data+index+1)) {
+      // uint32_t time = app_timer_cnt_diff_compute(app_timer_cnt_get(), start_tick);
+      // NRF_LOG_DEBUG("========= the time is %d ========\r\n", time);
+      NRF_LOG_HEXDUMP_INFO(p_data + index, field_length + 1);
+    }
     index += field_length + 1;
   }
-  NRF_LOG_DEBUG("end of one parse beacon!!!!!\r\n");
 }
 
 static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context) {
@@ -329,10 +371,21 @@ static void ble_stack_init(void) {
   APP_ERROR_CHECK(err_code);
 }
 
+static void start_scan_process() {
+
+    ret_code_t err_code = led_set(&m_led_scan,NULL);
+    APP_ERROR_CHECK(err_code);
+
+    err_code = app_timer_start(m_repeated_timer_id, APP_TIMER_TICKS(REPEATED_TIMER_INTERVAL), NULL);
+    APP_ERROR_CHECK(err_code);
+
+    start_tick = app_timer_cnt_get();
+    _scan_sd_start();
+}
 
 int main(void) {
     uint32_t err_code;
-    err_code = NRF_LOG_INIT(NULL);
+    err_code = NRF_LOG_INIT(get_rtc_counter);
     APP_ERROR_CHECK(err_code);
 		timer_init();
 	
@@ -345,11 +398,8 @@ int main(void) {
     board_init();
     thingy_init();
     ble_stack_init();
-
-    err_code = led_set(&m_led_scan,NULL);
-    APP_ERROR_CHECK(err_code);
-    _scan_sd_start();
-    
+    create_timers();
+    start_scan_process();
     for (;;)
     {
         app_sched_execute();
