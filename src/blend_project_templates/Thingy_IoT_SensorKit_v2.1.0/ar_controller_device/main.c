@@ -59,6 +59,7 @@
 #include "ble_conn_params.h"
 #include "ble_hci.h"
 #include "ble_uis.h"
+#include "blend.h"
 #include "drv_ext_gpio.h"
 #include "drv_ext_light.h"
 #include "m_batt_meas.h"
@@ -79,36 +80,6 @@
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
 
-//! Scan interval in units of 0.625 millisecond.
-#define SCAN_INTERVAL           0x0f00
-//! Scan window in units of 0.625 millisecond.
-#define SCAN_WINDOW             0x0f00
-//! Timout when scanning. in second 0x0000 disables timeout.
-#define SCAN_TIMEOUT            0x0000 
-static ble_gap_scan_params_t const m_scan_params =
-{
-  .active   = 0,
-  .interval = SCAN_INTERVAL,
-  .window   = SCAN_WINDOW,
-  .timeout  = SCAN_TIMEOUT,
-#if (NRF_SD_BLE_API_VERSION <= 2)
-  .selective   = 0,
-  .p_whitelist = NULL,
-#endif
-#if (NRF_SD_BLE_API_VERSION >= 3)
-  .use_whitelist = 0,
-#endif
-};
-#define FILTER_PREFIX_LEN 3
-// 0xFF is the manufacturer data field. 
-uint8_t filter_prefix[FILTER_PREFIX_LEN] = {
-    0xFF, 0x18, 0x01
-};
-uint32_t start_tick = 0;
-APP_TIMER_DEF (m_repeated_timer_id);
-
-#define REPEATED_TIMER_INTERVAL     300000
-
 //! Value used as error code on stack dump, can be used to identify stack location on stack unwind.
 #define DEAD_BEEF 0xDEADBEEF
 //! Maximum size of scheduler events.
@@ -117,8 +88,11 @@ APP_TIMER_DEF (m_repeated_timer_id);
 #define SCHED_QUEUE_SIZE 60
 
 //! BLEnd parameters {Epoch, Adv. interval, mode}.
-
-static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
+blend_param_t m_blend_param = { 2000, 77, BLEND_MODE_FULL};
+#define APP_DEVICE_NUM 0x01
+#define MAX_DEVICE 10
+#define m_data_len 7
+#define discover_index 1
 
 #define LED_CONFIG_GREEN			\
   {						\
@@ -162,6 +136,29 @@ static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
       }						\
   }
 
+//! Discovered device count.
+uint8_t payload[m_data_len] = {APP_DEVICE_NUM,
+			       0x00, 0x00,
+			       0x00, 0x00,
+			       0x00, 0x00};
+blend_data_t m_blend_data;
+
+#define FILTER_PREFIX_LEN 3
+uint8_t filter_prefix[FILTER_PREFIX_LEN] = {
+    0xFF, 0x18, 0x01
+};
+uint32_t start_tick = 0;
+APP_TIMER_DEF (m_repeated_timer_id);
+
+#define REPEATED_TIMER_INTERVAL     300000
+
+uint32_t start_tick = 0;
+static uint32_t epoch_count = 0;
+// uint8_t found_device[MAX_DEVICE];
+
+static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
+
+uint8_t found_device[MAX_DEVICE] = {0,0,0};
 
 static const ble_uis_led_t m_led_scan = LED_CONFIG_PURPLE;
 static const ble_uis_led_t m_led_adv = LED_CONFIG_GREEN;
@@ -192,13 +189,6 @@ void app_error_fault_handler(uint32_t id, uint32_t pc, uint32_t info)
     app_error_save_and_stop(id, pc, info);
 }
 
-uint32_t get_rtc_counter(void)
-{
-  uint32_t time = app_timer_cnt_diff_compute(app_timer_cnt_get(), start_tick);
-  return APP_TIMER_MS(time) & 0xffff;
-  // return app_timer_cnt_get();
-}
-
 /**@brief Function for assert macro callback.
  *
  * @details This function will be called in case of an assert in the SoftDevice.
@@ -211,6 +201,13 @@ uint32_t get_rtc_counter(void)
 void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
 {
     app_error_handler(DEAD_BEEF, line_num, p_file_name);
+}
+
+uint32_t get_rtc_counter(void)
+{
+  uint32_t time = app_timer_cnt_diff_compute(app_timer_cnt_get(), start_tick);
+  return APP_TIMER_MS(time) & 0xffff;
+  // return app_timer_cnt_get();
 }
 
 
@@ -226,7 +223,6 @@ static void power_manage(void)
     uint32_t err_code = sd_app_evt_wait();
     APP_ERROR_CHECK(err_code);
 }
-
 
 static void thingy_init(void)
 {
@@ -286,41 +282,83 @@ static void board_init(void)
 
     nrf_delay_ms(100);
 }
-
-/**@brief Timeout handler for the repeated timer.
- */
-static void repeated_timer_handler(void * p_context)
-{
-    
-}
-
 static void timer_init(void)
 {
     ret_code_t err_code = app_timer_init();
     APP_ERROR_CHECK(err_code);
 }
 
-/**@brief Create timers.
- */
-static void create_timers()
+/* static void restart_timer_handler(void* p_context){ */
+/*   for (int i = 0; i < MAX_DEVICE; i ++) */
+/*     { */
+/*       if (i == (APP_DEVICE_NUM - 1)){ */
+/* 	continue; */
+/*       } */
+/*       if (found_device[i] == 0){ */
+/* 	NRF_LOG_INFO(NRF_LOG_COLOR_CODE_RED"===Fail to find device %d ===\r\n", i+1); */
+/*       } */
+/*     } */
+/*   nrf_delay_ms(100); */
+/*   sd_nvic_SystemReset(); */
+/* } */
+
+static void run_test(){
+  ret_code_t err_code;
+  memset(&found_device, 0, sizeof(found_device));
+  start_tick = app_timer_cnt_get();
+  blend_sched_start();
+}
+
+static void set_blend_data()
 {
-    ret_code_t err_code;
-
-    // Create timers
-    err_code = app_timer_create(&m_repeated_timer_id,
-                                APP_TIMER_MODE_REPEATED,
-                                repeated_timer_handler);
-    APP_ERROR_CHECK(err_code);
-}
-
-static bool verify_beacon_prefix(uint8_t* p_data) {
-  for (int i = 0; i < FILTER_PREFIX_LEN; i ++) {
-    if (p_data[i] != filter_prefix[i]) {
-      return false;
-    }
+  m_blend_data.data_length = m_data_len;
+  m_blend_data.data = payload;
+  if (blend_advdata_set(&m_blend_data) != BLEND_NO_ERROR) {
+    NRF_LOG_ERROR("Blend data set error");
   }
-  return true;
 }
+
+static void m_blend_handler(blend_evt_t * p_blend_evt)
+{
+  if (p_blend_evt->evt_id == BLEND_EVT_ADV_REPORT) {
+      uint8_t * p_data = p_blend_evt->evt_data.data;
+      uint8_t dlen = p_blend_evt->evt_data.data_length;
+      int nbgr_id = p_data[0];
+      uint32_t now_time = app_timer_cnt_get();
+      uint8_t dis_flag = 0;
+      if (dis_flag == 0) {
+	found_device[nbgr_id - 1] = 1;
+	uint32_t time = app_timer_cnt_diff_compute(now_time, start_tick);
+	time = APP_TIMER_MS(time) & 0xffff;
+	NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN"===Found device %d At time: %d===\r\n", nbgr_id, time);
+      }
+      return;
+    }
+  if (p_blend_evt->evt_id == BLEND_EVT_EPOCH_START) {
+      epoch_count += 1;
+      ret_code_t err_code = led_set(&m_led_scan,NULL);
+      NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN"Epoch %d started.\r\n", epoch_count);
+      APP_ERROR_CHECK(err_code);
+    }	
+  if (p_blend_evt->evt_id == BLEND_EVT_AFTER_SCAN) {
+      ret_code_t err_code = led_set(&m_led_adv,NULL);
+      NRF_LOG_DEBUG("Scan stopped.\r\n", epoch_count);
+      APP_ERROR_CHECK(err_code);
+    }
+}
+
+static void ble_stack_init(void) {
+  m_ble_init_t ble_params;
+  ret_code_t err_code;
+  // Initialize BLE handling module.
+  ble_params.evt_handler = ble_evt_handler;
+  ble_params.p_service_handles = m_ble_service_handles;
+  ble_params.service_num = THINGY_SERVICES_MAX;
+
+  err_code = m_ble_init(&ble_params);
+  APP_ERROR_CHECK(err_code);
+}
+
 
 void parse_beacon(ble_gap_evt_adv_report_t const * p_adv_report) {
 
@@ -359,53 +397,22 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context) {
     }
 }
 
-void _scan_sd_start() {
-  ret_code_t err_code;
-  err_code = sd_ble_gap_scan_start(&m_scan_params);
-  APP_ERROR_CHECK(err_code);
-}
-
-static void ble_stack_init(void) {
-  m_ble_init_t ble_params;
-  ret_code_t err_code;
-  // Initialize BLE handling module.
-  ble_params.evt_handler = ble_evt_handler;
-  ble_params.p_service_handles = m_ble_service_handles;
-  ble_params.service_num = THINGY_SERVICES_MAX;
-
-  err_code = m_ble_init(&ble_params);
-  APP_ERROR_CHECK(err_code);
-}
-
-static void start_scan_process() {
-
-    ret_code_t err_code = led_set(&m_led_scan,NULL);
-    APP_ERROR_CHECK(err_code);
-
-    err_code = app_timer_start(m_repeated_timer_id, APP_TIMER_TICKS(REPEATED_TIMER_INTERVAL), NULL);
-    APP_ERROR_CHECK(err_code);
-
-    start_tick = app_timer_cnt_get();
-    _scan_sd_start();
-}
-
 int main(void) {
     uint32_t err_code;
     err_code = NRF_LOG_INIT(get_rtc_counter);
     APP_ERROR_CHECK(err_code);
 		timer_init();
 	
-    NRF_LOG_INFO("===== Scanner started! =====\r\n");
-
+    // NRF_LOG_DEBUG("===== Blend mode %d started! =====\r\n", m_blend_param.blend_mode);
+    
     APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
     err_code = app_timer_init();
     APP_ERROR_CHECK(err_code);
 
     board_init();
     thingy_init();
-    ble_stack_init();
-    create_timers();
-    start_scan_process();
+	
+        
     for (;;)
     {
         app_sched_execute();

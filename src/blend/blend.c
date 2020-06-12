@@ -46,6 +46,9 @@ static m_ble_service_handle_t*  _blend_service_handles;
 
 #define _blend_reserved_idx (BEACON_SIZE_B - BLEND_BIDIR_RESERVED_LENGTH)
 #define _blend_payload_index (BLEND_IDENTIFIER_LENGTH + BLEND_STACK_RESERVED)
+
+#define _blend_does_unfiltered false
+
 bool _blend_adv_upload_flag = false;
 bool _blend_last_full_beacon_flag = false;
 #if defined(BLEND_SDK_THINGY) || defined(BLEND_SDK_14)
@@ -276,6 +279,26 @@ void blend_parse(ble_gap_evt_adv_report_t const * p_adv_report) {
 }
 #endif
 
+static void blend_unfiltered_evt(ble_gap_evt_adv_report_t const * p_adv_report) {
+  if (_blend_does_unfiltered) {
+    #if defined(BLEND_SDK_15)
+      uint8_t* p_data = (uint8_t *)p_adv_report->data.p_data;
+      uint8_t dlen = p_adv_report->data.len;
+    #endif
+
+    #if defined(BLEND_SDK_14) || defined(BLEND_SDK_THINGY)
+      uint8_t* p_data = (uint8_t*)p_adv_report->data;
+      uint8_t dlen = p_adv_report->dlen;
+    #endif
+
+    blend_evt_t new_blend_evt;
+    new_blend_evt.evt_id = BLEND_EVT_UNFILTERED_BEACON;
+    new_blend_evt.evt_data.data = p_data;
+    new_blend_evt.evt_data.data_length = dlen;
+    new_blend_evt.peer_addr = p_adv_report->peer_addr;
+    (*_blend_evt_handler) (&new_blend_evt);
+  }
+}
 /**@brief Function for handling BLE events.
  *
  * @param[in]   p_ble_evt   Bluetooth stack event.
@@ -287,6 +310,7 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context) {
     switch (p_ble_evt->header.evt_id) {
     case BLE_GAP_EVT_ADV_REPORT: {
       ble_gap_evt_adv_report_t const * p_adv_report = &p_gap_evt->params.adv_report;
+      blend_unfiltered_evt(p_adv_report);
       blend_parse(p_adv_report);
       break;
     }

@@ -422,6 +422,10 @@ static void m_blend_handler(blend_evt_t * p_blend_evt)
       NRF_LOG_DEBUG("Scan stopped.\r\n", epoch_count);
       APP_ERROR_CHECK(err_code);
     }
+
+  if (p_blend_evt->evt_id == BLEND_EVT_UNFILTERED_BEACON) {
+    NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN"Get unfiltered beacon.\r\n");
+  }
 }
 
 int main(void) {

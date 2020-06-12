@@ -10,6 +10,8 @@
 #define BLEND_EVT_EPOCH_START  0x02
 #define BLEND_EVT_AFTER_SCAN  0x03
 #define BLEND_EVT_LAST_FULL_BEACON 0x04
+#define BLEND_EVT_UNFILTERED_BEACON 0x05
+
 // Beacon size in bytes.
 #define BEACON_SIZE_B  31
 // Reserved length only used in bidirectional mode
