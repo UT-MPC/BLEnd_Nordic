@@ -47,7 +47,7 @@ static m_ble_service_handle_t*  _blend_service_handles;
 #define _blend_reserved_idx (BEACON_SIZE_B - BLEND_BIDIR_RESERVED_LENGTH)
 #define _blend_payload_index (BLEND_IDENTIFIER_LENGTH + BLEND_STACK_RESERVED)
 
-#define _blend_does_unfiltered false
+static bool _blend_does_unfiltered false
 
 bool _blend_adv_upload_flag = false;
 bool _blend_last_full_beacon_flag = false;
@@ -697,3 +697,7 @@ void blend_init(blend_param_t input, blend_evt_handler_t handler, m_ble_service_
   memset(_blend_beacon_content, 0, sizeof(_blend_beacon_content));
 }
 #endif
+
+void set_does_report_unfiltered_beacon(bool flag) {
+  _blend_does_unfiltered = flag;
+}
