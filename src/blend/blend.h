@@ -115,4 +115,6 @@ void blend_init(blend_param_t blend_param, blend_evt_handler_t handler, m_ble_se
 */
 blend_ret_t blend_advdata_set(blend_data_t* user_data);
 
+// Change whether report unfiltered beacon to the client
+void set_does_report_unfiltered_beacon(bool flag);
 #endif    // _UTMPCBLEND_H

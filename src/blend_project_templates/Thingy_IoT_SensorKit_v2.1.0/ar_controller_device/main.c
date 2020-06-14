@@ -79,6 +79,7 @@
 #define  NRF_LOG_MODULE_NAME "main          "
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
+#include "ble_gap.h"
 
 //! Value used as error code on stack dump, can be used to identify stack location on stack unwind.
 #define DEAD_BEEF 0xDEADBEEF
@@ -88,11 +89,16 @@
 #define SCHED_QUEUE_SIZE 60
 
 //! BLEnd parameters {Epoch, Adv. interval, mode}.
-blend_param_t m_blend_param = { 2000, 77, BLEND_MODE_FULL};
+blend_param_t m_blend_param = { 150, 100, BLEND_MODE_FULL};
 #define APP_DEVICE_NUM 0x01
 #define MAX_DEVICE 10
 #define m_data_len 7
 #define discover_index 1
+
+#define LED_CONFIG_OFF \
+  {             \
+    .mode = BLE_UIS_LED_MODE_OFF  \
+  }             
 
 #define LED_CONFIG_GREEN			\
   {						\
@@ -136,6 +142,21 @@ blend_param_t m_blend_param = { 2000, 77, BLEND_MODE_FULL};
       }						\
   }
 
+  /* === Section (LED Configs) === */
+#define LED_CONFIG_CHARGING			\
+  {						\
+    .mode = BLE_UIS_LED_MODE_BREATHE,		\
+    .data =					\
+    {						\
+      .mode_const =				\
+      {						\
+	.r  = 255,				\
+	.g  = 255,				\
+	.b  = 255,				\
+      }						\
+    }						\
+  }
+
 //! Discovered device count.
 uint8_t payload[m_data_len] = {APP_DEVICE_NUM,
 			       0x00, 0x00,
@@ -144,13 +165,17 @@ uint8_t payload[m_data_len] = {APP_DEVICE_NUM,
 blend_data_t m_blend_data;
 
 #define FILTER_PREFIX_LEN 3
+#define MAC_ADDR_LEN 6
+#define CMD_START (FILTER_PREFIX_LEN+MAC_ADDR_LEN)
+// 0xFF is the manufacturer data field. 
 uint8_t filter_prefix[FILTER_PREFIX_LEN] = {
-    0xFF, 0x18, 0x01
+    0xFF, 0xFE, 0xFF
 };
-uint32_t start_tick = 0;
-APP_TIMER_DEF (m_repeated_timer_id);
+static const ble_uis_led_t m_led_config_on = LED_CONFIG_PURPLE;
+static const ble_uis_led_t m_led_config_off = LED_CONFIG_OFF;
+// record BLE address of this device
+ble_gap_addr_t m_addr;
 
-#define REPEATED_TIMER_INTERVAL     300000
 
 uint32_t start_tick = 0;
 static uint32_t epoch_count = 0;
@@ -167,7 +192,16 @@ uint8_t on_scan_flag  = 0;
 uint8_t discovered = 0;
 bool discover_mode = true;
 
+/*!< Button related variables */
+static bool charging_mode = false;
+int btn_hit_cnt = 0;
+static const ble_uis_led_t m_led_config_charging = LED_CONFIG_CHARGING;
+
 static const nrf_drv_twi_t m_twi_sensors = NRF_DRV_TWI_INSTANCE(TWI_SENSOR_INSTANCE);
+static void button_evt_handler(uint8_t pin_no, uint8_t button_action);
+
+
+
 
 void app_error_fault_handler(uint32_t id, uint32_t pc, uint32_t info)
 {
@@ -203,13 +237,6 @@ void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
     app_error_handler(DEAD_BEEF, line_num, p_file_name);
 }
 
-uint32_t get_rtc_counter(void)
-{
-  uint32_t time = app_timer_cnt_diff_compute(app_timer_cnt_get(), start_tick);
-  return APP_TIMER_MS(time) & 0xffff;
-  // return app_timer_cnt_get();
-}
-
 
 /**@brief Function for placing the application in low power state while waiting for events.
  */
@@ -222,6 +249,27 @@ static void power_manage(void)
 
     uint32_t err_code = sd_app_evt_wait();
     APP_ERROR_CHECK(err_code);
+}
+
+static ret_code_t button_init(void) {
+  ret_code_t err_code;
+
+  /* Configure gpiote for the sensors data ready interrupt. */
+  if (!nrf_drv_gpiote_is_init()) {
+    err_code = nrf_drv_gpiote_init();
+    APP_ERROR_CHECK(err_code);
+  }
+  static const app_button_cfg_t button_cfg = {
+    .pin_no         = BUTTON,
+    .active_state   = APP_BUTTON_ACTIVE_LOW,
+    .pull_cfg       = NRF_GPIO_PIN_PULLUP,
+    .button_handler = button_evt_handler
+  };  
+
+  err_code = app_button_init(&button_cfg, 1, APP_TIMER_TICKS(50));
+  APP_ERROR_CHECK(err_code);
+
+  return app_button_enable();
 }
 
 static void thingy_init(void)
@@ -245,6 +293,9 @@ static void thingy_init(void)
 
     /* err_code = led_set(&m_led_idle,NULL); */
     /* APP_ERROR_CHECK(err_code); */
+    err_code = button_init();
+    APP_ERROR_CHECK(err_code);
+
 }
 
 static void board_init(void)
@@ -288,19 +339,31 @@ static void timer_init(void)
     APP_ERROR_CHECK(err_code);
 }
 
-/* static void restart_timer_handler(void* p_context){ */
-/*   for (int i = 0; i < MAX_DEVICE; i ++) */
-/*     { */
-/*       if (i == (APP_DEVICE_NUM - 1)){ */
-/* 	continue; */
-/*       } */
-/*       if (found_device[i] == 0){ */
-/* 	NRF_LOG_INFO(NRF_LOG_COLOR_CODE_RED"===Fail to find device %d ===\r\n", i+1); */
-/*       } */
-/*     } */
-/*   nrf_delay_ms(100); */
-/*   sd_nvic_SystemReset(); */
-/* } */
+static void toggle_charging_mode() {
+  if (charging_mode) {
+    charging_mode = false;
+    sd_nvic_SystemReset();
+  }
+  charging_mode = true;
+  blend_sched_stop();
+  ret_code_t err_code = led_set(&m_led_config_charging, NULL);
+  APP_ERROR_CHECK(err_code);
+}
+
+static void button_evt_handler(uint8_t pin_no, uint8_t button_action) {
+  uint32_t err_code;
+  if (pin_no == BUTTON)
+  {
+    if (button_action == 0){
+      btn_hit_cnt += 1;
+      if (btn_hit_cnt == 3){
+        NRF_LOG_DEBUG("Pressed 3 times. Switch modes.\n");
+        toggle_charging_mode();
+        btn_hit_cnt = 0;
+      }
+    }
+  }
+}
 
 static void run_test(){
   ret_code_t err_code;
@@ -318,93 +381,62 @@ static void set_blend_data()
   }
 }
 
-static void m_blend_handler(blend_evt_t * p_blend_evt)
-{
-  if (p_blend_evt->evt_id == BLEND_EVT_ADV_REPORT) {
-      uint8_t * p_data = p_blend_evt->evt_data.data;
-      uint8_t dlen = p_blend_evt->evt_data.data_length;
-      int nbgr_id = p_data[0];
-      uint32_t now_time = app_timer_cnt_get();
-      uint8_t dis_flag = 0;
-      if (dis_flag == 0) {
-	found_device[nbgr_id - 1] = 1;
-	uint32_t time = app_timer_cnt_diff_compute(now_time, start_tick);
-	time = APP_TIMER_MS(time) & 0xffff;
-	NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN"===Found device %d At time: %d===\r\n", nbgr_id, time);
-      }
-      return;
+static bool verify_beacon(uint8_t* p_data) {
+  for (int i = 0; i < FILTER_PREFIX_LEN; i ++) {
+    if (p_data[i] != filter_prefix[i]) {
+      return false;
     }
-  if (p_blend_evt->evt_id == BLEND_EVT_EPOCH_START) {
-      epoch_count += 1;
-      ret_code_t err_code = led_set(&m_led_scan,NULL);
-      NRF_LOG_DEBUG(NRF_LOG_COLOR_CODE_GREEN"Epoch %d started.\r\n", epoch_count);
-      APP_ERROR_CHECK(err_code);
-    }	
-  if (p_blend_evt->evt_id == BLEND_EVT_AFTER_SCAN) {
-      ret_code_t err_code = led_set(&m_led_adv,NULL);
-      NRF_LOG_DEBUG("Scan stopped.\r\n", epoch_count);
-      APP_ERROR_CHECK(err_code);
+  }
+  uint8_t* p_addr = p_data + FILTER_PREFIX_LEN;
+  // Verfiy Mac address;
+  for (int i = 0; i < MAC_ADDR_LEN; ++i) {
+    if (p_addr[i] != m_addr.addr[MAC_ADDR_LEN-1-i]) {
+      return false;
     }
+  }
+  return true;
 }
 
-static void ble_stack_init(void) {
-  m_ble_init_t ble_params;
-  ret_code_t err_code;
-  // Initialize BLE handling module.
-  ble_params.evt_handler = ble_evt_handler;
-  ble_params.p_service_handles = m_ble_service_handles;
-  ble_params.service_num = THINGY_SERVICES_MAX;
-
-  err_code = m_ble_init(&ble_params);
-  APP_ERROR_CHECK(err_code);
+static void process_cmd(uint8_t* p_data) {
+  if (p_data[0] == 0) {
+    uint32_t err_code = led_set(&m_led_config_on, NULL);
+    APP_ERROR_CHECK(err_code);
+  } else {
+    uint32_t err_code = led_set(&m_led_config_off, NULL);
+    APP_ERROR_CHECK(err_code);
+  }
 }
 
-
-void parse_beacon(ble_gap_evt_adv_report_t const * p_adv_report) {
+void parse_beacon(uint8_t* p_data, uint8_t dlen) {
 
   uint16_t index  = 0;
-  uint16_t countdown;
-  uint8_t* p_data = (uint8_t*)p_adv_report->data;
   bool flag = false;
-  uint64_t total_len = 0;
-  while (index < p_adv_report->dlen) {
+  while (index < dlen) {
     uint8_t field_length = p_data[index];
-    total_len += field_length + 1;
-    uint8_t field_type = p_data[index + 1];
-    if (verify_beacon_prefix(p_data+index+1)) {
-      flag = true;
-      // uint32_t time = app_timer_cnt_diff_compute(app_timer_cnt_get(), start_tick);
-      // NRF_LOG_DEBUG("========= the time is %d ========\r\n", time);
+    if (verify_beacon(p_data+index+1)) {
+      // NRF_LOG_HEXDUMP_INFO(p_data + index, field_length + 1);
+      process_cmd(p_data + index + 1 + CMD_START);
     }
     index += field_length + 1;
   }
-  if (flag) {
-    NRF_LOG_HEXDUMP_INFO(p_data, total_len + 1);
-  }
 }
 
-static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context) {
-    ble_gap_evt_t const * p_gap_evt = &p_ble_evt->evt.gap_evt;
-
-    switch (p_ble_evt->header.evt_id) {
-    case BLE_GAP_EVT_ADV_REPORT: {
-      ble_gap_evt_adv_report_t const * p_adv_report = &p_gap_evt->params.adv_report;
-      parse_beacon(p_adv_report);
-      break;
-    }
-    default:
-      break;
-    }
+static void m_blend_handler(blend_evt_t * p_blend_evt)
+{
+  if (p_blend_evt->evt_id == BLEND_EVT_UNFILTERED_BEACON) {
+    parse_beacon(p_blend_evt->evt_data.data, p_blend_evt->evt_data.data_length);
+  }
 }
 
 int main(void) {
     uint32_t err_code;
-    err_code = NRF_LOG_INIT(get_rtc_counter);
+    err_code = NRF_LOG_INIT(NULL);
     APP_ERROR_CHECK(err_code);
 		timer_init();
 	
     // NRF_LOG_DEBUG("===== Blend mode %d started! =====\r\n", m_blend_param.blend_mode);
-    
+
+
     APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
     err_code = app_timer_init();
     APP_ERROR_CHECK(err_code);
@@ -412,7 +444,17 @@ int main(void) {
     board_init();
     thingy_init();
 	
-        
+    blend_init(m_blend_param, m_blend_handler, m_ble_service_handles);
+    set_blend_data();
+    set_does_report_unfiltered_beacon(true);
+
+    // Get the BLE address of this device
+    err_code = sd_ble_gap_addr_get(&m_addr);
+    APP_ERROR_CHECK(err_code);
+    NRF_LOG_HEXDUMP_INFO(m_addr.addr, 6);
+
+    run_test();
+    
     for (;;)
     {
         app_sched_execute();
