@@ -81,6 +81,9 @@
 #include "nrf_log_ctrl.h"
 #include "ble_gap.h"
 
+#include "command.h"
+#include "speaker.h"
+
 //! Value used as error code on stack dump, can be used to identify stack location on stack unwind.
 #define DEAD_BEEF 0xDEADBEEF
 //! Maximum size of scheduler events.
@@ -398,12 +401,25 @@ static bool verify_beacon(uint8_t* p_data) {
 }
 
 static void process_cmd(uint8_t* p_data) {
-  if (p_data[0] == 0) {
-    uint32_t err_code = led_set(&m_led_config_on, NULL);
-    APP_ERROR_CHECK(err_code);
-  } else {
-    uint32_t err_code = led_set(&m_led_config_off, NULL);
-    APP_ERROR_CHECK(err_code);
+  switch(p_data[0]) {
+    case CMD_LIGHT: {
+      if (p_data[1] == 0) {
+        uint32_t err_code = led_set(&m_led_config_on, NULL);
+        APP_ERROR_CHECK(err_code);
+      } else {
+        uint32_t err_code = led_set(&m_led_config_off, NULL);
+        APP_ERROR_CHECK(err_code);
+      }
+      break;
+    }
+    case CMD_SOUND: {
+      if (p_data[1] > SPEAKER_SAMPLE_MAX) {
+        NRF_LOG_ERROR(" Speaker service sample soundtrack id invalid\r\n");
+      }
+      NRF_LOG_INFO("Playing speaker sample soundtrack%d\r\n", p_data[1]);
+      play_sample_sound(p_data[1]);
+      break;
+    }
   }
 }
 
@@ -414,7 +430,7 @@ void parse_beacon(uint8_t* p_data, uint8_t dlen) {
   while (index < dlen) {
     uint8_t field_length = p_data[index];
     if (verify_beacon(p_data+index+1)) {
-      // NRF_LOG_HEXDUMP_INFO(p_data + index, field_length + 1);
+      // NRF_LOG_HEXDUMP_INFO(p_data + index + 1 + CMD_START, 2);
       process_cmd(p_data + index + 1 + CMD_START);
     }
     index += field_length + 1;
@@ -443,7 +459,7 @@ int main(void) {
 
     board_init();
     thingy_init();
-	
+	  m_speaker_init();
     blend_init(m_blend_param, m_blend_handler, m_ble_service_handles);
     set_blend_data();
     set_does_report_unfiltered_beacon(true);
@@ -451,7 +467,6 @@ int main(void) {
     // Get the BLE address of this device
     err_code = sd_ble_gap_addr_get(&m_addr);
     APP_ERROR_CHECK(err_code);
-    NRF_LOG_HEXDUMP_INFO(m_addr.addr, 6);
 
     run_test();
     

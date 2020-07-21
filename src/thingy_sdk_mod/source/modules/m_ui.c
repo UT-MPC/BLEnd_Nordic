@@ -159,9 +159,8 @@ ret_code_t led_set(ble_uis_led_t const * const p_config_ui,
     err_code = drv_ext_light_off(DRV_EXT_RGB_LED_LIGHTWELL);
     RETURN_IF_ERROR(err_code);
 
-    if (mp_config_ui->mode == BLE_UIS_LED_MODE_OFF)
+    if (conf_ui.mode == BLE_UIS_LED_MODE_OFF)
     {
-        conf_ui.mode = BLE_UIS_LED_MODE_OFF;         // If LED configured as off in the static config, let the LED remain off when BLE is disconnected as well.
         NRF_LOG_DEBUG("Mode: BLE_UIS_LED_MODE_OFF \r\n");
         return NRF_SUCCESS;
     }
