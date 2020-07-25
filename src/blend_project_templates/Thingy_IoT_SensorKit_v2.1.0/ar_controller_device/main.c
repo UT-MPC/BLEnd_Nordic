@@ -93,9 +93,6 @@
 
 //! BLEnd parameters {Epoch, Adv. interval, mode}.
 blend_param_t m_blend_param = { 150, 100, BLEND_MODE_FULL};
-#define APP_DEVICE_NUM 0x01
-#define MAX_DEVICE 10
-#define m_data_len 7
 #define discover_index 1
 
 #define LED_CONFIG_OFF \
@@ -161,10 +158,8 @@ blend_param_t m_blend_param = { 150, 100, BLEND_MODE_FULL};
   }
 
 //! Discovered device count.
-uint8_t payload[m_data_len] = {APP_DEVICE_NUM,
-			       0x00, 0x00,
-			       0x00, 0x00,
-			       0x00, 0x00};
+#define m_data_len 1
+uint8_t payload[m_data_len] = {0x01};
 blend_data_t m_blend_data;
 
 #define FILTER_PREFIX_LEN 3
@@ -182,11 +177,9 @@ ble_gap_addr_t m_addr;
 
 uint32_t start_tick = 0;
 static uint32_t epoch_count = 0;
-// uint8_t found_device[MAX_DEVICE];
 
 static m_ble_service_handle_t  m_ble_service_handles[THINGY_SERVICES_MAX];
 
-uint8_t found_device[MAX_DEVICE] = {0,0,0};
 
 static const ble_uis_led_t m_led_scan = LED_CONFIG_PURPLE;
 static const ble_uis_led_t m_led_adv = LED_CONFIG_GREEN;
@@ -370,7 +363,6 @@ static void button_evt_handler(uint8_t pin_no, uint8_t button_action) {
 
 static void run_test(){
   ret_code_t err_code;
-  memset(&found_device, 0, sizeof(found_device));
   start_tick = app_timer_cnt_get();
   blend_sched_start();
 }
