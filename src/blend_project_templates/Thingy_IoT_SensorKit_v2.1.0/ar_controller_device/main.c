@@ -157,9 +157,23 @@ blend_param_t m_blend_param = { 150, 100, BLEND_MODE_FULL};
     }						\
   }
 
+#define UI_CONFIG_DEFAULT_ERROR                                 \
+{                                                               \
+    .mode = BLE_UIS_LED_MODE_BREATHE,                           \
+    .data =                                                     \
+    {                                                           \
+        .mode_breathe =                                         \
+        {                                                       \
+            .color_mix  = (uint8_t)DRV_EXT_LIGHT_COLOR_RED,     \
+            .intensity  = 20,        \
+            .delay      = 50            \
+        }                                                       \
+    }                                                           \
+}
+
 //! Discovered device count.
 #define m_data_len 1
-uint8_t payload[m_data_len] = {0x01};
+uint8_t payload[m_data_len] = {0x00};
 blend_data_t m_blend_data;
 
 #define FILTER_PREFIX_LEN 3
@@ -171,6 +185,12 @@ uint8_t filter_prefix[FILTER_PREFIX_LEN] = {
 };
 static const ble_uis_led_t m_led_config_on = LED_CONFIG_PURPLE;
 static const ble_uis_led_t m_led_config_off = LED_CONFIG_OFF;
+static const ble_uis_led_t m_led_config_flash = UI_CONFIG_DEFAULT_ERROR;
+
+APP_TIMER_DEF (light_flash_timer);
+#define LIGHT_FLASH_DURATION 2000
+
+
 // record BLE address of this device
 ble_gap_addr_t m_addr;
 
@@ -329,10 +349,17 @@ static void board_init(void)
 
     nrf_delay_ms(100);
 }
+static void light_flash_timer_handler() {
+  uint32_t err_code = led_set(&m_led_config_off, NULL);
+  APP_ERROR_CHECK(err_code);
+}
+
 static void timer_init(void)
 {
-    ret_code_t err_code = app_timer_init();
-    APP_ERROR_CHECK(err_code);
+  ret_code_t err_code = app_timer_init();
+  APP_ERROR_CHECK(err_code);
+  err_code = app_timer_create(&light_flash_timer, APP_TIMER_MODE_SINGLE_SHOT, light_flash_timer_handler);
+  APP_ERROR_CHECK(err_code);
 }
 
 static void toggle_charging_mode() {
@@ -394,6 +421,14 @@ static bool verify_beacon(uint8_t* p_data) {
 
 static void process_cmd(uint8_t* p_data) {
   switch(p_data[0]) {
+    case CMD_FLASH: {
+      uint32_t err_code = led_set(&m_led_config_flash, NULL);
+      APP_ERROR_CHECK(err_code);
+
+      err_code =app_timer_start(light_flash_timer,APP_TIMER_TICKS(LIGHT_FLASH_DURATION), NULL);
+      APP_ERROR_CHECK(err_code);
+      break;
+    }
     case CMD_LIGHT: {
       if (p_data[1] == 0) {
         uint32_t err_code = led_set(&m_led_config_on, NULL);

@@ -9,5 +9,6 @@ typedef struct {
 
 #define CMD_LIGHT 0
 #define CMD_SOUND 1
+#define CMD_FLASH 2
 
 #endif
